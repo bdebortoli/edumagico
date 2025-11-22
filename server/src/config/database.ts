@@ -18,22 +18,34 @@ import { TeacherRating } from '../entities/TeacherRating';
 import { Invoice } from '../entities/Invoice';
 
 // Garante que as variáveis de ambiente estão carregadas
-// Força o uso das variáveis de ambiente, sem fallback para 'postgres'
-const dbUsername = process.env.DB_USERNAME;
-if (!dbUsername) {
-  console.error('❌ DB_USERNAME não está definido no .env!');
-  process.exit(1);
-}
+// Suporta DATABASE_URL (Render) ou variáveis individuais
+let dbConfig: any;
 
-const dbConfig = {
-  type: 'postgres' as const,
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  username: dbUsername, // Usa exatamente o que está no .env
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_DATABASE || 'edumagico',
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-};
+if (process.env.DATABASE_URL) {
+  // Render fornece DATABASE_URL automaticamente
+  dbConfig = {
+    type: 'postgres' as const,
+    url: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  };
+} else {
+  // Fallback para variáveis individuais
+  const dbUsername = process.env.DB_USERNAME;
+  if (!dbUsername) {
+    console.error('❌ DB_USERNAME não está definido no .env!');
+    process.exit(1);
+  }
+
+  dbConfig = {
+    type: 'postgres' as const,
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432'),
+    username: dbUsername,
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_DATABASE || 'edumagico',
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  };
+}
 
 // Log da configuração que será usada (apenas em desenvolvimento)
 if (process.env.NODE_ENV === 'development') {

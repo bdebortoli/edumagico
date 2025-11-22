@@ -123,16 +123,27 @@ async function fillNullFields(client: Client, tableName: string, columnName: str
   }
 }
 
-// Função para corrigir dados antes da sincronização
-async function fixDatabaseBeforeSync() {
-  const client = new Client({
+// Função auxiliar para criar configuração do Client
+function getClientConfig() {
+  if (process.env.DATABASE_URL) {
+    return {
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    };
+  }
+  return {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432'),
     user: process.env.DB_USERNAME,
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_DATABASE || 'edumagico',
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  });
+  };
+}
+
+// Função para corrigir dados antes da sincronização
+async function fixDatabaseBeforeSync() {
+  const client = new Client(getClientConfig());
 
   try {
     await client.connect();
@@ -416,14 +427,7 @@ async function startServer() {
     await fixDatabaseBeforeSync();
     
     // Conecta ao banco ANTES de inicializar o TypeORM para garantir que as colunas estejam corretas
-    const preClient = new Client({
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432'),
-      user: process.env.DB_USERNAME,
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_DATABASE || 'edumagico',
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-    });
+    const preClient = new Client(getClientConfig());
     
     try {
       await preClient.connect();
@@ -501,14 +505,7 @@ async function startServer() {
       if (syncError.message && syncError.message.includes('rotas') && syncError.message.includes('contains null values')) {
         console.log('⚠️ Erro de sincronização detectado, corrigindo schema...');
         
-        const fixClient = new Client({
-          host: process.env.DB_HOST || 'localhost',
-          port: parseInt(process.env.DB_PORT || '5432'),
-          user: process.env.DB_USERNAME,
-          password: process.env.DB_PASSWORD || '',
-          database: process.env.DB_DATABASE || 'edumagico',
-          ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-        });
+        const fixClient = new Client(getClientConfig());
         
         try {
           await fixClient.connect();
