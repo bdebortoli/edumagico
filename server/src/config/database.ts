@@ -58,7 +58,9 @@ if (process.env.NODE_ENV === 'development') {
 
 export const AppDataSource = new DataSource({
   ...dbConfig,
-  synchronize: process.env.NODE_ENV === 'development',
+  // Habilitar synchronize em produção temporariamente para criar tabelas
+  // Em produção real, use migrations ao invés de synchronize
+  synchronize: process.env.SKIP_SYNC !== 'true', // Permite desabilitar via variável de ambiente
   logging: process.env.NODE_ENV === 'development',
   entities: [
     User,
