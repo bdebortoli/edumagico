@@ -1,0 +1,38 @@
+services:
+  # Backend API
+  - type: web
+    name: edumagico-api
+    env: node
+    plan: free
+    buildCommand: cd server && npm install && npm run build
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_DATABASE
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+        optional: true
+
+  # Banco de Dados PostgreSQL
+  - type: pspg
+    name: edumagico-db
+    plan: free
+    databaseName: edumagico
+    user: edumagico_user
+

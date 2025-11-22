@@ -1,0 +1,81 @@
+-- Migration: Populate Admin Routes and Permissions
+-- This script populates all admin routes and their permissions
+-- Starting from ID 35 (last route was 34)
+
+-- Insert Admin Routes
+INSERT INTO rotas (path, method, description) VALUES
+('/api/admin/dashboard', 'GET', 'Dashboard administrativo'),
+('/api/admin/users', 'GET', 'Listar usuários'),
+('/api/admin/users/:id', 'GET', 'Obter detalhes do usuário'),
+('/api/admin/users/:id', 'PUT', 'Atualizar usuário'),
+('/api/admin/users/:id', 'DELETE', 'Deletar usuário'),
+('/api/admin/content', 'GET', 'Listar conteúdos'),
+('/api/admin/content/:id', 'DELETE', 'Deletar conteúdo'),
+('/api/admin/subscriptions', 'GET', 'Listar assinaturas'),
+('/api/admin/subscriptions/:userId', 'PUT', 'Atualizar assinatura'),
+('/api/admin/notifications', 'POST', 'Criar notificação'),
+('/api/admin/notifications', 'GET', 'Listar notificações'),
+('/api/admin/financial/transactions', 'GET', 'Listar transações financeiras'),
+('/api/admin/financial/reports/monthly', 'GET', 'Relatório mensal'),
+('/api/admin/financial/reports/dre', 'GET', 'DRE - Demonstração do Resultado do Exercício'),
+('/api/admin/rankings/teachers', 'GET', 'Ranking de professores'),
+('/api/admin/reports/usage', 'GET', 'Relatório de uso'),
+('/api/admin/accesses', 'GET', 'Listar acessos')
+ON CONFLICT (path, method) DO NOTHING;
+
+-- Insert Admin Route Permissions (only admin role)
+-- Routes start from ID 35
+INSERT INTO rotas_permissões (rota_id, role, allowed) VALUES
+(35, 'admin', TRUE),
+(35, 'parent', FALSE),
+(35, 'teacher', FALSE),
+(36, 'admin', TRUE),
+(36, 'parent', FALSE),
+(36, 'teacher', FALSE),
+(37, 'admin', TRUE),
+(37, 'parent', FALSE),
+(37, 'teacher', FALSE),
+(38, 'admin', TRUE),
+(38, 'parent', FALSE),
+(38, 'teacher', FALSE),
+(39, 'admin', TRUE),
+(39, 'parent', FALSE),
+(39, 'teacher', FALSE),
+(40, 'admin', TRUE),
+(40, 'parent', FALSE),
+(40, 'teacher', FALSE),
+(41, 'admin', TRUE),
+(41, 'parent', FALSE),
+(41, 'teacher', FALSE),
+(42, 'admin', TRUE),
+(42, 'parent', FALSE),
+(42, 'teacher', FALSE),
+(43, 'admin', TRUE),
+(43, 'parent', FALSE),
+(43, 'teacher', FALSE),
+(44, 'admin', TRUE),
+(44, 'parent', FALSE),
+(44, 'teacher', FALSE),
+(45, 'admin', TRUE),
+(45, 'parent', FALSE),
+(45, 'teacher', FALSE),
+(46, 'admin', TRUE),
+(46, 'parent', FALSE),
+(46, 'teacher', FALSE),
+(47, 'admin', TRUE),
+(47, 'parent', FALSE),
+(47, 'teacher', FALSE),
+(48, 'admin', TRUE),
+(48, 'parent', FALSE),
+(48, 'teacher', FALSE),
+(49, 'admin', TRUE),
+(49, 'parent', FALSE),
+(49, 'teacher', FALSE),
+(50, 'admin', TRUE),
+(50, 'parent', FALSE),
+(50, 'teacher', FALSE),
+(51, 'admin', TRUE),
+(51, 'parent', FALSE),
+(51, 'teacher', FALSE)
+ON CONFLICT (rota_id, role) DO UPDATE SET allowed = EXCLUDED.allowed;
+
