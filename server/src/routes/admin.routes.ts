@@ -176,7 +176,7 @@ router.get('/users/:id', async (req: Request, res: Response) => {
     // Buscar acessos do usuário
     const accesses = await accessRepository.find({
       where: { userId: id },
-      orderBy: { loginAt: 'DESC' },
+      order: { loginAt: 'DESC' },
       take: 1 // Último acesso
     });
 
@@ -219,7 +219,7 @@ router.get('/users/:id', async (req: Request, res: Response) => {
       // Buscar todas as faturas
       const invoices = await invoiceRepository.find({
         where: { userId: id },
-        orderBy: { dueDate: 'DESC' }
+        order: { dueDate: 'DESC' }
       });
 
       // Calcular total pago (apenas faturas pagas)
@@ -230,7 +230,7 @@ router.get('/users/:id', async (req: Request, res: Response) => {
       // Buscar transações financeiras relacionadas
       const transactions = await transactionRepository.find({
         where: { userId: id, category: 'subscription' },
-        orderBy: { createdAt: 'DESC' }
+        order: { createdAt: 'DESC' }
       });
 
       response.user = {
@@ -278,7 +278,7 @@ router.get('/users/:id', async (req: Request, res: Response) => {
       // Buscar todos os materiais
       const contents = await contentRepository.find({
         where: { authorId: id },
-        orderBy: { createdAt: 'DESC' }
+        order: { createdAt: 'DESC' }
       });
 
       // Buscar todas as vendas dos materiais do professor
@@ -286,7 +286,7 @@ router.get('/users/:id', async (req: Request, res: Response) => {
       const sales = contentIds.length > 0 ? await purchaseRepository.find({
         where: { contentId: In(contentIds) },
         relations: ['content'],
-        orderBy: { createdAt: 'DESC' }
+        order: { createdAt: 'DESC' }
       }) : [];
 
       // Calcular total recebido (vendas dos materiais)
@@ -294,10 +294,10 @@ router.get('/users/:id', async (req: Request, res: Response) => {
         return sum + parseFloat(sale.price.toString());
       }, 0);
 
-      // Buscar avaliações dos materiais do professor
-      const ratings = contentIds.length > 0 ? await ratingRepository.find({
-        where: { contentId: In(contentIds) }
-      }) : [];
+      // Buscar avaliações do professor
+      const ratings = await ratingRepository.find({
+        where: { teacherId: id }
+      });
 
       // Calcular avaliação geral (média das avaliações)
       const averageRating = ratings.length > 0
@@ -311,7 +311,7 @@ router.get('/users/:id', async (req: Request, res: Response) => {
           type: 'income',
           category: 'content_sale'
         },
-        orderBy: { createdAt: 'DESC' }
+        order: { createdAt: 'DESC' }
       });
 
       response.user = {
@@ -729,15 +729,17 @@ router.get('/rankings/teachers', async (req: Request, res: Response) => {
             .addSelect('COUNT(r.id)', 'count')
             .where('r.teacherId = :teacherId', { teacherId: teacher.id })
             .getRawOne(),
-          AppDataSource.getRepository(Purchase).count({
-            where: {
-              contentId: await contentRepository
-                .createQueryBuilder('c')
-                .select('c.id')
-                .where('c.authorId = :teacherId', { teacherId: teacher.id })
-                .getRawMany()
-            }
-          })
+          (async () => {
+            const contentIds = await contentRepository
+              .createQueryBuilder('c')
+              .select('c.id', 'id')
+              .where('c.authorId = :teacherId', { teacherId: teacher.id })
+              .getRawMany();
+            const ids = contentIds.map(c => c.id);
+            return ids.length > 0 ? await AppDataSource.getRepository(Purchase).count({
+              where: { contentId: In(ids) }
+            }) : 0;
+          })()
         ]);
 
         // Calcula total de vendas
@@ -910,7 +912,7 @@ router.put('/permissions', async (req: Request, res: Response) => {
       await permissionRepository.save(permission);
     } else {
       permission = permissionRepository.create({
-        rotaId,
+        rotaId: routeId,
         role: role as 'parent' | 'teacher' | 'admin',
         allowed
       });

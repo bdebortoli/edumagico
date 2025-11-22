@@ -100,7 +100,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       type,
       authorId: req.user!.id,
       authorName: req.user!.name,
-      authorRole: req.user!.role,
+      authorRole: req.user!.role as 'parent' | 'teacher',
       subject,
       ageRange,
       grade,

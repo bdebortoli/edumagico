@@ -569,9 +569,10 @@ async function startServer() {
       }
     }
     
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🌐 Accessible at: http://localhost:${PORT} and http://192.168.233.8:${PORT}`);
+    const port = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
+    app.listen(port, '0.0.0.0', () => {
+      console.log(`🚀 Server running on port ${port}`);
+      console.log(`🌐 Accessible at: http://localhost:${port}`);
     });
   } catch (error) {
     console.error('❌ Database connection error:', error);
