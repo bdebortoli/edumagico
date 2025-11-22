@@ -131,6 +131,7 @@ async function fixDatabaseBeforeSync() {
     user: process.env.DB_USERNAME,
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_DATABASE || 'edumagico',
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
   });
 
   try {
@@ -421,6 +422,7 @@ async function startServer() {
       user: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD || '',
       database: process.env.DB_DATABASE || 'edumagico',
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     });
     
     try {
@@ -505,6 +507,7 @@ async function startServer() {
           user: process.env.DB_USERNAME,
           password: process.env.DB_PASSWORD || '',
           database: process.env.DB_DATABASE || 'edumagico',
+          ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
         });
         
         try {

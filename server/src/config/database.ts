@@ -32,6 +32,7 @@ const dbConfig = {
   username: dbUsername, // Usa exatamente o que está no .env
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_DATABASE || 'edumagico',
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 };
 
 // Log da configuração que será usada (apenas em desenvolvimento)
