@@ -17,7 +17,7 @@ import { User, ContentItem, ChildProfile, ActivityHistory } from './types';
 import { db } from './services/database';
 import { LayoutDashboard, PlusCircle, Library, LogOut, Settings, Gamepad2, BookOpen, ShoppingBag, Trophy, Sparkles, Users, CreditCard, BarChart3, Split, Filter, User as UserIcon, Search, Calendar, Bell, DollarSign, Award, Clock, Shield, Activity } from 'lucide-react';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 const GRADE_OPTIONS = [
   "Todos", "Pré-escola", 

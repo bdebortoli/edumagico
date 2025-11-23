@@ -125,7 +125,7 @@ interface UsageReport {
   activitiesCompleted: number;
 }
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
+const API_BASE = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3001/api';
 
 interface AdminDashboardProps {
   currentView?: string;

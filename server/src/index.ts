@@ -198,6 +198,24 @@ app.post('/api/setup/populate-routes', async (req, res) => {
   }
 });
 
+// Rota raiz da API (para evitar 404 quando acessar /api)
+app.get('/api', (req, res) => {
+  res.json({
+    message: 'EduMágico API',
+    version: '1.0.0',
+    endpoints: {
+      auth: '/api/auth',
+      users: '/api/users',
+      content: '/api/content',
+      marketplace: '/api/marketplace',
+      family: '/api/family',
+      analytics: '/api/analytics',
+      admin: '/api/admin'
+    },
+    health: '/health'
+  });
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);

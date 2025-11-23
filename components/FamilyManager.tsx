@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, ChildProfile } from '../types';
 import { Plus, Trash2, User as UserIcon, Lock, Pencil, X, RefreshCw, ChevronRight, ChevronLeft, Smile, Bot, Ghost, MapPin, School } from 'lucide-react';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 interface FamilyManagerProps {
   user: User;

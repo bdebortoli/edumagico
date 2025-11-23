@@ -4,7 +4,7 @@ import { Check, CreditCard, Shield, Star, Calendar, Zap } from 'lucide-react';
 import { User, PlanType, SubscriptionCycle } from '../types';
 import { formatarNumeroCartao, formatarDataValidade, formatarCVC } from '../services/cardService';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 interface SubscriptionPageProps {
   currentUser: User;

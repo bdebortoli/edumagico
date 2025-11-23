@@ -8,7 +8,7 @@ interface LoginPageProps {
   onShowRegister?: () => void;
 }
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export default function LoginPage({ onLoginSuccess, onBack, onShowRegister }: LoginPageProps) {
   const [email, setEmail] = useState('');
