@@ -56,6 +56,7 @@ const corsOptions: CorsOptions = {
         callback(null, true);
       } else {
         console.log('⚠️ CORS bloqueado para origem:', origin);
+        console.log('⚠️ Origens permitidas:', allowedOrigins);
         callback(new Error('Not allowed by CORS'));
       }
     } else {
@@ -63,7 +64,11 @@ const corsOptions: CorsOptions = {
       callback(null, true);
     }
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400 // 24 horas
 };
 app.use(cors(corsOptions));
 app.use(express.json());
