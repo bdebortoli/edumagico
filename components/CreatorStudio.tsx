@@ -12,6 +12,7 @@ interface CreatorStudioProps {
   initialSource?: ContentItem | null;
   onCancelRemix?: () => void;
   children?: Array<{ id: string; name: string; grade: string; birthDate?: string; age?: number }>; // Filhos do usuário (para pais)
+  onNavigateToSubscription?: () => void; // Navegação para tela de assinaturas
 }
 
 const GRADE_OPTIONS = [
@@ -34,7 +35,7 @@ const calculateAge = (birthDate?: string): number | undefined => {
   return age;
 };
 
-const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPlan, userRole, initialSource, onCancelRemix, children = [] }) => {
+const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPlan, userRole, initialSource, onCancelRemix, children = [], onNavigateToSubscription }) => {
   // Mode: 'manual' = form based gen, 'chat' = chat gen, 'edit' = editing existing content manually/hybrid
   const [mode, setMode] = useState<'manual' | 'chat' | 'edit'>('manual');
   
@@ -186,7 +187,10 @@ const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPla
         <p className="text-slate-600 max-w-md mb-6">
           A criação de conteúdo com IA Mágica está disponível apenas no plano Premium ou para Professores.
         </p>
-        <button className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition">
+        <button 
+          onClick={onNavigateToSubscription}
+          className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition"
+        >
           Fazer Upgrade Agora
         </button>
       </div>

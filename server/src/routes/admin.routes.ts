@@ -601,6 +601,44 @@ router.get('/financial/transactions', async (req: Request, res: Response) => {
   }
 });
 
+// Get invoices
+router.get('/financial/invoices', async (req: Request, res: Response) => {
+  try {
+    const { type, status, startDate, endDate, page = '1', limit = '20' } = req.query;
+    const invoiceRepository = AppDataSource.getRepository(Invoice);
+    
+    const query = invoiceRepository.createQueryBuilder('invoice')
+      .leftJoinAndSelect('invoice.user', 'user');
+
+    if (type) {
+      query.where('invoice.type = :type', { type });
+    }
+
+    if (status) {
+      query.andWhere('invoice.status = :status', { status });
+    }
+
+    if (startDate && endDate) {
+      query.andWhere('invoice.createdAt BETWEEN :startDate AND :endDate', {
+        startDate: new Date(startDate as string),
+        endDate: new Date(endDate as string)
+      });
+    }
+
+    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+    const [invoices, total] = await query
+      .skip(skip)
+      .take(parseInt(limit as string))
+      .orderBy('invoice.createdAt', 'DESC')
+      .getManyAndCount();
+
+    res.json({ invoices, total, page: parseInt(page as string), limit: parseInt(limit as string) });
+  } catch (error) {
+    console.error('Get invoices error:', error);
+    res.status(500).json({ error: 'Erro ao buscar faturas' });
+  }
+});
+
 router.get('/financial/reports/monthly', async (req: Request, res: Response) => {
   try {
     const { month, year } = req.query;

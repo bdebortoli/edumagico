@@ -133,8 +133,10 @@ export const generateEducationalContent = async (
       }
     });
 
-    const parts: any[] = [{ text: promptText }];
+    // IMPORTANT: Files must come BEFORE the text prompt for better analysis
+    const parts: any[] = [];
     
+    // Add files FIRST
     files.forEach(file => {
       parts.push({
         inlineData: {
@@ -143,6 +145,9 @@ export const generateEducationalContent = async (
         }
       });
     });
+    
+    // Then add the text prompt
+    parts.push({ text: promptText });
 
     const result = await model.generateContent(parts);
     

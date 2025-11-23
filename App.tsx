@@ -304,8 +304,30 @@ function App() {
     }
   };
 
-  const handleUpgrade = (plan: 'basic'|'premium', cycle: 'monthly'|'yearly') => {
+  const handleUpgrade = async (plan: 'basic'|'premium', cycle: 'monthly'|'yearly') => {
     if (!user) return;
+    
+    // Busca o usuário atualizado do backend para garantir que está sincronizado
+    const token = localStorage.getItem('token') || '';
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          updateUserState(data.user);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching updated user:', error);
+    }
+    
+    // Fallback: atualiza localmente se não conseguir buscar do backend
     const updated = {
         ...user,
         plan: plan,
@@ -605,6 +627,7 @@ function App() {
                 initialSource={remixItem}
                 onCancelRemix={() => { setRemixItem(null); setCurrentView(user?.role === 'teacher' ? 'teacher_dash' : 'library'); }}
                 children={user?.children || []}
+                onNavigateToSubscription={() => setCurrentView('subscription')}
             />
           )}
 

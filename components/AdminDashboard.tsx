@@ -148,6 +148,7 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
   const [contents, setContents] = useState<Content[]>([]);
   const [accesses, setAccesses] = useState<Access[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [rankings, setRankings] = useState<TeacherRanking[]>([]);
@@ -321,14 +322,26 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
       if (filters.type) params.append('type', filters.type);
       if (filters.status) params.append('status', filters.status);
       
-      const res = await fetch(`${API_BASE}/admin/financial/transactions?${params}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setTransactions(data.transactions || []);
+      const [transactionsRes, invoicesRes] = await Promise.all([
+        fetch(`${API_BASE}/admin/financial/transactions?${params}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${API_BASE}/admin/financial/invoices?${params}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+      
+      if (transactionsRes.ok) {
+        const transactionsData = await transactionsRes.json();
+        setTransactions(transactionsData.transactions || []);
+      }
+      
+      if (invoicesRes.ok) {
+        const invoicesData = await invoicesRes.json();
+        setInvoices(invoicesData.invoices || []);
+      }
     } catch (error) {
-      console.error('Error loading transactions:', error);
+      console.error('Error loading financial data:', error);
     } finally {
       setLoading(false);
     }
@@ -716,6 +729,7 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
       return (
         <FinancialManagement
           transactions={transactions}
+          invoices={invoices}
           filters={filters}
           onFiltersChange={setFilters}
         />
@@ -1111,8 +1125,111 @@ const NotificationsManagement = ({ notifications, onCreateNotification }: any) =
   </div>
 );
 
-const FinancialManagement = ({ transactions, filters, onFiltersChange }: any) => (
+const FinancialManagement = ({ transactions, invoices, filters, onFiltersChange }: any) => (
   <div className="space-y-6">
+    {/* Invoices Section */}
+    <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+        <h2 className="text-xl font-bold text-gray-900">Faturas de Assinaturas</h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={filters.status || ''}
+            onChange={(e) => onFiltersChange({ ...filters, status: e.target.value })}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm"
+          >
+            <option value="">Todos os status</option>
+            <option value="paid">Pago</option>
+            <option value="pending">Pendente</option>
+            <option value="overdue">Vencido</option>
+            <option value="cancelled">Cancelado</option>
+          </select>
+          <input
+            type="date"
+            value={filters.startDate || ''}
+            onChange={(e) => onFiltersChange({ ...filters, startDate: e.target.value })}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm"
+          />
+          <input
+            type="date"
+            value={filters.endDate || ''}
+            onChange={(e) => onFiltersChange({ ...filters, endDate: e.target.value })}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm"
+          />
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Data</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Usuário</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Tipo</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Valor</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Forma de Pagamento</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Vencimento</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Pagamento</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {invoices.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
+                  Nenhuma fatura encontrada
+                </td>
+              </tr>
+            ) : (
+              invoices.map((invoice: any) => (
+                <tr key={invoice.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {new Date(invoice.createdAt).toLocaleDateString('pt-BR')}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">
+                    {invoice.user?.name || 'N/A'}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
+                      {invoice.type === 'subscription' ? 'Assinatura' : invoice.type}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 font-semibold text-green-600">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(invoice.amount))}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {invoice.paymentMethod === 'credit_card' ? 'Cartão de Crédito' :
+                     invoice.paymentMethod === 'debit_card' ? 'Cartão de Débito' :
+                     invoice.paymentMethod === 'pix' ? 'PIX' :
+                     invoice.paymentMethod === 'boleto' ? 'Boleto' :
+                     invoice.paymentMethod || 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {new Date(invoice.dueDate).toLocaleDateString('pt-BR')}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {invoice.paidAt ? new Date(invoice.paidAt).toLocaleDateString('pt-BR') : '-'}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                      invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
+                      invoice.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      invoice.status === 'overdue' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {invoice.status === 'paid' ? 'Pago' :
+                       invoice.status === 'pending' ? 'Pendente' :
+                       invoice.status === 'overdue' ? 'Vencido' :
+                       invoice.status === 'cancelled' ? 'Cancelado' : invoice.status}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {/* Transactions Section */}
     <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <h2 className="text-xl font-bold text-gray-900">Transações Financeiras</h2>

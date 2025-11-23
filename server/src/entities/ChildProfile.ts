@@ -10,8 +10,8 @@ export class ChildProfile {
   @Column()
   name: string;
 
-  @Column({ type: 'date' })
-  birthDate: Date;
+  @Column({ type: 'date', nullable: true })
+  birthDate?: Date;
 
   @Column({ type: 'int', nullable: true })
   age: number; // Mantido para compatibilidade, será calculado a partir de birthDate

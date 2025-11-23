@@ -1,13 +1,8 @@
-import { GoogleGenAI } from "@google/genai";
 import { ContentType } from "../types";
+import { generateEducationalContent } from "./geminiService";
 
-const apiKey = 
-  import.meta.env.VITE_GEMINI_API_KEY || 
-  (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
-  (typeof process !== 'undefined' && process.env?.API_KEY) ||
-  '';
-
-const ai = apiKey && apiKey !== 'PLACEHOLDER_API_KEY' ? new GoogleGenAI({ apiKey }) : null;
+// API Base URL
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export interface RefinementOption {
   id: string;
@@ -75,13 +70,7 @@ export const refineContent = async (
   grade?: string
 ): Promise<any> => {
   try {
-    if (!apiKey || !ai) {
-      throw new Error("Chave da API Gemini não configurada");
-    }
-
-    const modelId = "gemini-2.5-flash";
-    
-    // Extract current content text
+    // Extract current content text for context
     let currentContentText = '';
     if (contentType === 'story') {
       currentContentText = currentContent.chapters?.map((ch: any) => `${ch.title}\n${ch.text}`).join('\n\n') || '';
@@ -91,42 +80,30 @@ export const refineContent = async (
       currentContentText = `${currentContent.simpleExplanation}\n\nPontos-chave: ${currentContent.keyPoints?.join(', ')}\n\nCuriosidade: ${currentContent.funFact}`;
     }
 
-    const prompt = `Você está refinando um conteúdo educacional existente.
-
-CONTEÚDO ATUAL:
-"""
-${currentContentText}
-"""
-
-SOLICITAÇÃO DE REFINAMENTO:
-"${refinementRequest}"
+    // Monta o prompt de refinamento
+    const refinementPrompt = `Refinar o conteúdo existente aplicando: "${refinementRequest}"
 
 INSTRUÇÕES:
 - Mantenha a estrutura e formato do conteúdo original
-- Aplique a solicitação de refinamento solicitada
+- Aplique a solicitação de refinamento
 - Mantenha a linguagem adequada para ${age} anos
 - Idioma: Português (Brasil)
 ${grade ? `- Série: ${grade} (alinhado com BNCC)` : ''}
-- Retorne o conteúdo refinado no mesmo formato JSON do original
+- Retorne o conteúdo refinado no mesmo formato JSON do original`;
 
-Retorne APENAS o JSON com o conteúdo refinado, sem explicações adicionais.`;
-
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: { parts: [{ text: prompt }] },
-      config: {
-        responseMimeType: "application/json",
-        temperature: 0.7
-      }
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("No response from Gemini");
-    
-    return JSON.parse(text);
+    // Usa o generateEducationalContent com sourceContext e refinementRequest
+    return await generateEducationalContent(
+      refinementPrompt,
+      age,
+      contentType,
+      [], // Sem arquivos novos
+      currentContentText, // Conteúdo atual como sourceContext
+      grade,
+      refinementRequest // Solicitação de refinamento
+    );
   } catch (error: any) {
     console.error("Refinement Error:", error);
-    throw error;
+    throw new Error(error.message || "Erro ao refinar conteúdo. Verifique sua conexão e tente novamente.");
   }
 };
 
