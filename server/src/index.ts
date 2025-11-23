@@ -37,14 +37,25 @@ const PORT = process.env.PORT || 3001;
 const corsOptions: CorsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (process.env.NODE_ENV === 'production') {
-      const allowedOrigins = process.env.CORS_ORIGIN 
-        ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
-        : [];
+      const corsOrigin = process.env.CORS_ORIGIN;
       
-      // Se não há origem definida ou a origem da requisição está na lista permitida
-      if (allowedOrigins.length === 0 || (origin && allowedOrigins.includes(origin))) {
+      // Se CORS_ORIGIN não está configurado, permite todas as origens (temporário para testes)
+      if (!corsOrigin || corsOrigin.trim() === '') {
+        console.log('⚠️ CORS_ORIGIN não configurado, permitindo todas as origens (temporário)');
+        callback(null, true);
+        return;
+      }
+      
+      const allowedOrigins = corsOrigin.split(',').map(o => o.trim());
+      
+      // Se a origem da requisição está na lista permitida
+      if (origin && allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else if (!origin) {
+        // Permite requisições sem origem (ex: Postman, curl)
         callback(null, true);
       } else {
+        console.log('⚠️ CORS bloqueado para origem:', origin);
         callback(new Error('Not allowed by CORS'));
       }
     } else {
@@ -58,9 +69,21 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check
+// Health check (antes de qualquer inicialização do banco)
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  try {
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      database: AppDataSource.isInitialized ? 'connected' : 'not connected'
+    });
+  } catch (error: any) {
+    res.status(500).json({ 
+      status: 'error', 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Endpoint temporário para popular rotas (remover após uso)
@@ -537,8 +560,12 @@ async function fixDatabaseBeforeSync() {
 // Initialize database
 async function startServer() {
   try {
-    // Primeiro, corrige os dados se necessário
-    await fixDatabaseBeforeSync();
+    // Tenta corrigir os dados, mas não falha se der erro
+    try {
+      await fixDatabaseBeforeSync();
+    } catch (fixError: any) {
+      console.log('⚠️ Aviso ao corrigir dados (continuando mesmo assim):', fixError.message);
+    }
     
     // Conecta ao banco ANTES de inicializar o TypeORM para garantir que as colunas estejam corretas
     const preClient = new Client(getClientConfig());
@@ -615,6 +642,7 @@ async function startServer() {
       await AppDataSource.initialize();
       console.log('✅ Database connected successfully');
     } catch (syncError: any) {
+      console.error('⚠️ Erro ao inicializar banco de dados:', syncError.message);
       // Se o erro for relacionado a DROP/ADD COLUMN na tabela rotas, corrige e tenta novamente
       if (syncError.message && syncError.message.includes('rotas') && syncError.message.includes('contains null values')) {
         console.log('⚠️ Erro de sincronização detectado, corrigindo schema...');
@@ -679,18 +707,36 @@ async function startServer() {
           throw syncError; // Re-lança o erro original
         }
       } else {
-        throw syncError; // Re-lança o erro se não for o esperado
+        // Não re-lança o erro, apenas loga e continua
+        console.error('⚠️ Erro ao inicializar banco, mas servidor continuará rodando:', syncError.message);
       }
     }
     
     const port = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
+    
+    // Inicia o servidor mesmo se houver problemas com o banco
     app.listen(port, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${port}`);
       console.log(`🌐 Accessible at: http://localhost:${port}`);
+      if (!AppDataSource.isInitialized) {
+        console.log('⚠️ Database not connected, but server is running');
+        console.log('⚠️ Some endpoints may not work without database connection');
+      }
     });
-  } catch (error) {
-    console.error('❌ Database connection error:', error);
-    process.exit(1);
+  } catch (error: any) {
+    console.error('❌ Error during initialization:', error.message);
+    // Tenta iniciar o servidor mesmo com erro
+    const port = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
+    try {
+      app.listen(port, '0.0.0.0', () => {
+        console.log(`🚀 Server running on port ${port} (without database connection)`);
+        console.log(`⚠️ Database connection failed, but server is accessible`);
+        console.log(`⚠️ Health check available at: http://localhost:${port}/health`);
+      });
+    } catch (listenError: any) {
+      console.error('❌ Failed to start server:', listenError.message);
+      process.exit(1);
+    }
   }
 }
 
