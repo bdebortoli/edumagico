@@ -93,6 +93,26 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: 'Apenas usuários Premium ou Professores podem criar conteúdo' });
     }
 
+    // For parents, validate that grade matches one of their children's grades
+    if (req.user!.role === 'parent') {
+      const userRepository = AppDataSource.getRepository(User);
+      const userWithChildren = await userRepository.findOne({
+        where: { id: req.user!.id },
+        relations: ['children']
+      });
+
+      if (!userWithChildren || !userWithChildren.children || userWithChildren.children.length === 0) {
+        return res.status(400).json({ error: 'Você precisa cadastrar pelo menos um filho para criar conteúdo' });
+      }
+
+      const childrenGrades = userWithChildren.children.map(child => child.grade);
+      if (grade && !childrenGrades.includes(grade)) {
+        return res.status(403).json({ 
+          error: `Você só pode criar conteúdo para as séries dos seus filhos: ${childrenGrades.join(', ')}` 
+        });
+      }
+    }
+
     const contentRepository = AppDataSource.getRepository(ContentItem);
     const content = contentRepository.create({
       title,

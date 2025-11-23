@@ -604,6 +604,7 @@ function App() {
                 userRole={user?.role || 'parent'} 
                 initialSource={remixItem}
                 onCancelRemix={() => { setRemixItem(null); setCurrentView(user?.role === 'teacher' ? 'teacher_dash' : 'library'); }}
+                children={user?.children || []}
             />
           )}
 

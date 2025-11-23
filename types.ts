@@ -74,7 +74,8 @@ export interface StudentProfile {
 export interface ChildProfile extends StudentProfile {
   id: string;
   name: string;
-  age: number;
+  birthDate?: string; // Data de nascimento no formato ISO (YYYY-MM-DD)
+  age?: number; // Calculado a partir de birthDate, mantido para compatibilidade
 }
 
 export interface ActivityHistory {

@@ -44,7 +44,8 @@ interface User {
 interface ChildProfile {
   id: string;
   name: string;
-  age: number;
+  birthDate?: string; // Data de nascimento no formato ISO (YYYY-MM-DD)
+  age?: number; // Calculado a partir de birthDate, mantido para compatibilidade
   grade: string;
   points: number;
   school?: string;
@@ -1593,14 +1594,30 @@ const UserDetailModal = ({ user, details, onClose, onViewContent }: any) => {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Alunos Vinculados</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {user.children.map((child: ChildProfile) => (
-                    <div key={child.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <p className="font-semibold text-gray-900">{child.name}</p>
-                      <p className="text-sm text-gray-600">{child.age} anos - {child.grade}</p>
-                      {child.school && <p className="text-sm text-gray-600">Escola: {child.school}</p>}
-                      <p className="text-sm text-gray-600 mt-2">Pontos: {child.points}</p>
-                    </div>
-                  ))}
+                  {user.children.map((child: ChildProfile) => {
+                    // Calcula idade a partir da data de nascimento se disponível
+                    const calculateAge = (birthDate?: string): number | undefined => {
+                      if (!birthDate) return child.age;
+                      const birth = new Date(birthDate);
+                      const today = new Date();
+                      let age = today.getFullYear() - birth.getFullYear();
+                      const monthDiff = today.getMonth() - birth.getMonth();
+                      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+                        age--;
+                      }
+                      return age;
+                    };
+                    const age = child.birthDate ? calculateAge(child.birthDate) : child.age;
+                    
+                    return (
+                      <div key={child.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="font-semibold text-gray-900">{child.name}</p>
+                        <p className="text-sm text-gray-600">{age || 'N/A'} anos - {child.grade}</p>
+                        {child.school && <p className="text-sm text-gray-600">Escola: {child.school}</p>}
+                        <p className="text-sm text-gray-600 mt-2">Pontos: {child.points}</p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

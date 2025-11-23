@@ -59,10 +59,29 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
     loadChildren();
   }, [onUpdateChildren]);
 
+  // Helper function to calculate age from birth date
+  const calculateAge = (birthDate: string): number => {
+    const birth = new Date(birthDate);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  // Helper function to format date for input (YYYY-MM-DD)
+  const formatDateForInput = (date: Date | string | undefined): string => {
+    if (!date) return '';
+    const d = typeof date === 'string' ? new Date(date) : date;
+    return d.toISOString().split('T')[0];
+  };
+
   // Form State
   const [formData, setFormData] = useState({
     name: '',
-    age: 7,
+    birthDate: '', // Data de nascimento no formato YYYY-MM-DD
     grade: '2º Ano Fund.',
     school: '',
     state: '',
@@ -127,7 +146,7 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
 
       setFormData({
         name: child.name,
-        age: child.age,
+        birthDate: child.birthDate ? formatDateForInput(child.birthDate) : '',
         grade: child.grade,
         school: child.school || '',
         state: child.state || '',
@@ -138,9 +157,13 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
     } else {
       // Create Mode
       setEditingId(null);
+      // Define data padrão como 8 anos atrás (idade típica para 1º ano)
+      const defaultDate = new Date();
+      defaultDate.setFullYear(defaultDate.getFullYear() - 8);
+      
       setFormData({
         name: '',
-        age: 7,
+        birthDate: formatDateForInput(defaultDate),
         grade: '1º Ano Fund.',
         school: '',
         state: '',
@@ -170,7 +193,7 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
           },
           body: JSON.stringify({
             name: formData.name,
-            age: formData.age,
+            birthDate: formData.birthDate,
             grade: formData.grade,
             school: formData.school,
             state: formData.state,
@@ -201,7 +224,7 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
           },
           body: JSON.stringify({
             name: formData.name,
-            age: formData.age,
+            birthDate: formData.birthDate,
             grade: formData.grade,
             school: formData.school,
             state: formData.state,
@@ -223,9 +246,12 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
 
       setIsModalOpen(false);
       // Limpa o formulário
+      const defaultDate = new Date();
+      defaultDate.setFullYear(defaultDate.getFullYear() - 7);
+      
       setFormData({
         name: '',
-        age: 7,
+        birthDate: formatDateForInput(defaultDate),
         grade: '2º Ano Fund.',
         school: '',
         state: '',
@@ -295,7 +321,9 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
             </div>
             <div className="flex-1">
               <h3 className="text-xl font-bold text-slate-800">{child.name}</h3>
-              <p className="text-slate-500 text-sm mb-1">{child.age} anos • {child.grade}</p>
+              <p className="text-slate-500 text-sm mb-1">
+                {child.birthDate ? calculateAge(child.birthDate) : child.age || 'N/A'} anos • {child.grade}
+              </p>
               {child.school && (
                  <p className="text-slate-400 text-xs flex items-center gap-1 truncate max-w-[150px]">
                     <School className="w-3 h-3" /> {child.school}
@@ -423,14 +451,20 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
                     
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Idade</label>
+                            <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Data de Nascimento</label>
                             <input 
-                                type="number" 
-                                value={formData.age}
-                                onChange={e => setFormData({...formData, age: Number(e.target.value)})}
+                                type="date" 
+                                value={formData.birthDate}
+                                onChange={e => setFormData({...formData, birthDate: e.target.value})}
                                 className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:border-indigo-500 outline-none font-bold text-slate-700"
-                                min="3" max="18"
+                                max={new Date().toISOString().split('T')[0]} // Não permite data futura
+                                required
                             />
+                            {formData.birthDate && (
+                              <p className="text-xs text-slate-400 mt-1">
+                                {calculateAge(formData.birthDate)} anos
+                              </p>
+                            )}
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Série Escolar</label>

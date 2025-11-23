@@ -1,23 +1,27 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { ContentType } from "../entities/ContentItem";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+if (!process.env.GEMINI_API_KEY) {
+  console.warn("⚠️  GEMINI_API_KEY não está configurada. A funcionalidade de geração de conteúdo não funcionará.");
+}
 
-const storySchema: Schema = {
-  type: Type.OBJECT,
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+
+const storySchema = {
+  type: SchemaType.OBJECT,
   properties: {
-    title: { type: Type.STRING, description: "A catchy title for the story" },
-    description: { type: Type.STRING, description: "A short synopsis" },
+    title: { type: SchemaType.STRING, description: "A catchy title for the story" },
+    description: { type: SchemaType.STRING, description: "A short synopsis" },
     content: {
-      type: Type.OBJECT,
+      type: SchemaType.OBJECT,
       properties: {
         chapters: {
-          type: Type.ARRAY,
+          type: SchemaType.ARRAY,
           items: {
-            type: Type.OBJECT,
+            type: SchemaType.OBJECT,
             properties: {
-              title: { type: Type.STRING },
-              text: { type: Type.STRING, description: "The story paragraph content, approx 100 words." },
+              title: { type: SchemaType.STRING },
+              text: { type: SchemaType.STRING, description: "The story paragraph content, approx 100 words." },
             },
             required: ["title", "text"]
           }
@@ -29,24 +33,24 @@ const storySchema: Schema = {
   required: ["title", "description", "content"]
 };
 
-const quizSchema: Schema = {
-  type: Type.OBJECT,
+const quizSchema = {
+  type: SchemaType.OBJECT,
   properties: {
-    title: { type: Type.STRING, description: "Title of the quiz" },
-    description: { type: Type.STRING, description: "What this quiz tests" },
+    title: { type: SchemaType.STRING, description: "Title of the quiz" },
+    description: { type: SchemaType.STRING, description: "What this quiz tests" },
     content: {
-      type: Type.OBJECT,
+      type: SchemaType.OBJECT,
       properties: {
         questions: {
-          type: Type.ARRAY,
+          type: SchemaType.ARRAY,
           items: {
-            type: Type.OBJECT,
+            type: SchemaType.OBJECT,
             properties: {
-              id: { type: Type.INTEGER },
-              question: { type: Type.STRING },
-              options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of 4 possible answers" },
-              correctIndex: { type: Type.INTEGER, description: "0-based index of the correct answer" },
-              explanation: { type: Type.STRING, description: "Why this answer is correct (for learning)" }
+              id: { type: SchemaType.INTEGER },
+              question: { type: SchemaType.STRING },
+              options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, description: "List of 4 possible answers" },
+              correctIndex: { type: SchemaType.INTEGER, description: "0-based index of the correct answer" },
+              explanation: { type: SchemaType.STRING, description: "Why this answer is correct (for learning)" }
             },
             required: ["id", "question", "options", "correctIndex", "explanation"]
           }
@@ -58,17 +62,17 @@ const quizSchema: Schema = {
   required: ["title", "description", "content"]
 };
 
-const summarySchema: Schema = {
-  type: Type.OBJECT,
+const summarySchema = {
+  type: SchemaType.OBJECT,
   properties: {
-    title: { type: Type.STRING },
-    description: { type: Type.STRING },
+    title: { type: SchemaType.STRING },
+    description: { type: SchemaType.STRING },
     content: {
-      type: Type.OBJECT,
+      type: SchemaType.OBJECT,
       properties: {
-        simpleExplanation: { type: Type.STRING, description: "A child-friendly explanation of the topic" },
-        keyPoints: { type: Type.ARRAY, items: { type: Type.STRING } },
-        funFact: { type: Type.STRING, description: "An interesting fact related to the topic" }
+        simpleExplanation: { type: SchemaType.STRING, description: "A child-friendly explanation of the topic" },
+        keyPoints: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+        funFact: { type: SchemaType.STRING, description: "An interesting fact related to the topic" }
       },
       required: ["simpleExplanation", "keyPoints", "funFact"]
     }
@@ -89,10 +93,14 @@ export const generateEducationalContent = async (
   files: FileAttachment[] = [],
   sourceContext?: string
 ): Promise<any> => {
-  const modelId = "gemini-2.5-flash";
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY não está configurada. Configure a chave da API do Gemini nas variáveis de ambiente.");
+  }
+
+  const modelId = "gemini-1.5-flash";
   
   let promptText = "";
-  let responseSchema: Schema | undefined;
+  let responseSchema: any;
 
   const baseInstruction = `Target Audience: ${age}-year-old child. Language: Portuguese.`;
   
@@ -115,35 +123,45 @@ export const generateEducationalContent = async (
       break;
   }
 
-  const parts: any[] = [{ text: promptText }];
-  
-  files.forEach(file => {
-    parts.push({
-      inlineData: {
-        mimeType: file.mimeType,
-        data: file.data
-      }
-    });
-  });
-
   try {
-    const response = await ai.models.generateContent({
+    const model = genAI.getGenerativeModel({ 
       model: modelId,
-      contents: { parts },
-      config: {
+      generationConfig: {
         responseMimeType: "application/json",
         responseSchema: responseSchema,
-        temperature: 0.7, 
+        temperature: 0.7,
       }
     });
 
-    const text = response.text;
-    if (!text) throw new Error("No response from Gemini");
+    const parts: any[] = [{ text: promptText }];
+    
+    files.forEach(file => {
+      parts.push({
+        inlineData: {
+          mimeType: file.mimeType,
+          data: file.data
+        }
+      });
+    });
+
+    const result = await model.generateContent(parts);
+    
+    const response = await result.response;
+    const text = response.text();
+    
+    if (!text) {
+      throw new Error("No response from Gemini");
+    }
     
     return JSON.parse(text);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Generation Error:", error);
-    throw error;
+    console.error("Error details:", {
+      message: error.message,
+      status: error.status,
+      statusText: error.statusText
+    });
+    throw new Error(`Erro ao gerar conteúdo com Gemini: ${error.message || 'Erro desconhecido'}`);
   }
 };
 
@@ -151,28 +169,44 @@ export const chatForCreation = async (
   history: {role: 'user'|'model', text: string}[],
   newMessage: string
 ): Promise<string> => {
-  const modelId = "gemini-2.5-flash";
-  
-  const contents = history.map(h => ({
-    role: h.role,
-    parts: [{ text: h.text }]
-  }));
-  
-  contents.push({
-    role: 'user',
-    parts: [{ text: newMessage }]
-  });
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY não está configurada. Configure a chave da API do Gemini nas variáveis de ambiente.");
+  }
 
-  const systemInstruction = "You are a helpful educational assistant named 'Edu'. Your goal is to help parents or teachers design a game or educational activity. Ask clarifying questions about the topic, age, and difficulty. Keep answers short and friendly (in Portuguese). Do NOT generate the JSON yet, just discuss ideas.";
+  const modelId = "gemini-1.5-flash";
+  
+  try {
+    const model = genAI.getGenerativeModel({ 
+      model: modelId,
+      systemInstruction: "You are a helpful educational assistant named 'Edu'. Your goal is to help parents or teachers design a game or educational activity. Ask clarifying questions about the topic, age, and difficulty. Keep answers short and friendly (in Portuguese). Do NOT generate the JSON yet, just discuss ideas."
+    });
 
-  const response = await ai.models.generateContent({
-    model: modelId,
-    contents: contents,
-    config: {
-      systemInstruction: systemInstruction
+    // Converte o histórico para o formato correto
+    const chatHistory = history.map(h => ({
+      role: h.role === 'user' ? 'user' : 'model',
+      parts: [{ text: h.text }]
+    }));
+
+    // Se há histórico, usa startChat, senão usa generateContent direto
+    if (chatHistory.length > 0) {
+      const chat = model.startChat({
+        history: chatHistory
+      });
+      const result = await chat.sendMessage(newMessage);
+      return result.response.text() || '';
+    } else {
+      const result = await model.generateContent(newMessage);
+      const response = await result.response;
+      return response.text() || '';
     }
-  });
-
-  return response.text || '';
+  } catch (error: any) {
+    console.error("Gemini Chat Error:", error);
+    console.error("Error details:", {
+      message: error.message,
+      status: error.status,
+      statusText: error.statusText
+    });
+    throw new Error(`Erro ao processar chat com Gemini: ${error.message || 'Erro desconhecido'}`);
+  }
 };
 

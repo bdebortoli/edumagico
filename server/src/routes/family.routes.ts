@@ -20,21 +20,43 @@ router.get('/children', async (req: AuthRequest, res: Response) => {
       order: { createdAt: 'DESC' }
     });
 
-    res.json({ children });
+    // Garante que a idade está calculada e formata birthDate para ISO string
+    const childrenWithAge = children.map(child => ({
+      ...child,
+      birthDate: child.birthDate ? child.birthDate.toISOString().split('T')[0] : null,
+      age: child.birthDate ? calculateAge(child.birthDate) : child.age
+    }));
+
+    res.json({ children: childrenWithAge });
   } catch (error) {
     console.error('Get children error:', error);
     res.status(500).json({ error: 'Erro ao buscar filhos' });
   }
 });
 
+// Helper function to calculate age from birth date
+function calculateAge(birthDate: Date | string): number {
+  const birth = typeof birthDate === 'string' ? new Date(birthDate) : birthDate;
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 // Create child
 router.post('/children', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, age, grade, school, state, city, avatar } = req.body;
+    const { name, birthDate, age, grade, school, state, city, avatar } = req.body;
 
-    if (!name || !age || !grade) {
-      return res.status(400).json({ error: 'Nome, idade e série são obrigatórios' });
+    if (!name || !birthDate || !grade) {
+      return res.status(400).json({ error: 'Nome, data de nascimento e série são obrigatórios' });
     }
+
+    // Calcula a idade a partir da data de nascimento
+    const calculatedAge = calculateAge(birthDate);
 
     // Check plan limits
     const user = await AppDataSource.getRepository(User).findOne({
@@ -59,7 +81,8 @@ router.post('/children', async (req: AuthRequest, res: Response) => {
     const childRepository = AppDataSource.getRepository(ChildProfile);
     const child = childRepository.create({
       name,
-      age,
+      birthDate: new Date(birthDate),
+      age: calculatedAge, // Calculado para compatibilidade
       grade,
       school,
       state,
@@ -81,7 +104,7 @@ router.post('/children', async (req: AuthRequest, res: Response) => {
 // Update child
 router.put('/children/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, age, grade, school, state, city, avatar } = req.body;
+    const { name, birthDate, grade, school, state, city, avatar } = req.body;
 
     const childRepository = AppDataSource.getRepository(ChildProfile);
     const child = await childRepository.findOne({
@@ -93,7 +116,10 @@ router.put('/children/:id', async (req: AuthRequest, res: Response) => {
     }
 
     if (name) child.name = name;
-    if (age) child.age = age;
+    if (birthDate) {
+      child.birthDate = new Date(birthDate);
+      child.age = calculateAge(birthDate); // Recalcula a idade
+    }
     if (grade) child.grade = grade;
     if (school !== undefined) child.school = school;
     if (state !== undefined) child.state = state;

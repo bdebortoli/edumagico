@@ -11,6 +11,7 @@ interface CreatorStudioProps {
   userRole: UserRole;
   initialSource?: ContentItem | null;
   onCancelRemix?: () => void;
+  children?: Array<{ id: string; name: string; grade: string; birthDate?: string; age?: number }>; // Filhos do usuário (para pais)
 }
 
 const GRADE_OPTIONS = [
@@ -20,7 +21,20 @@ const GRADE_OPTIONS = [
   "1º Ano Médio", "2º Ano Médio", "3º Ano Médio"
 ];
 
-const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPlan, userRole, initialSource, onCancelRemix }) => {
+// Helper function to calculate age from birth date
+const calculateAge = (birthDate?: string): number | undefined => {
+  if (!birthDate) return undefined;
+  const birth = new Date(birthDate);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPlan, userRole, initialSource, onCancelRemix, children = [] }) => {
   // Mode: 'manual' = form based gen, 'chat' = chat gen, 'edit' = editing existing content manually/hybrid
   const [mode, setMode] = useState<'manual' | 'chat' | 'edit'>('manual');
   
@@ -28,12 +42,44 @@ const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPla
   const [topic, setTopic] = useState('');
   const [title, setTitle] = useState(''); // Used for manual edit
   const [description, setDescription] = useState(''); // Used for manual edit
-  
-  // Age Range State
-  const [minAge, setMinAge] = useState<number>(6);
-  const [maxAge, setMaxAge] = useState<number>(8);
 
-  const [grade, setGrade] = useState<string>('2º Ano Fund.');
+  // Get unique grades from children
+  const getChildrenGrades = (): string[] => {
+    if (!children || children.length === 0) return [];
+    const grades = children.map(child => child.grade).filter((grade, index, self) => self.indexOf(grade) === index);
+    return grades.sort();
+  };
+
+  // Calculate age range from children
+  const getChildrenAgeRange = (): { min: number; max: number } | null => {
+    if (!children || children.length === 0) return null;
+    const ages = children
+      .map(child => child.birthDate ? calculateAge(child.birthDate) : child.age)
+      .filter((age): age is number => age !== undefined && age !== null);
+    
+    if (ages.length === 0) return null;
+    
+    return {
+      min: Math.min(...ages),
+      max: Math.max(...ages)
+    };
+  };
+
+  // Get default grade from children (first child's grade)
+  const getDefaultGrade = (): string => {
+    if (children && children.length > 0) {
+      return children[0].grade;
+    }
+    return '2º Ano Fund.';
+  };
+
+  // Age Range State - for parents, use children's ages
+  const childrenAgeRange = userRole === 'parent' ? getChildrenAgeRange() : null;
+  const [minAge, setMinAge] = useState<number>(childrenAgeRange?.min || 6);
+  const [maxAge, setMaxAge] = useState<number>(childrenAgeRange?.max || 8);
+
+  const availableGrades = userRole === 'parent' ? getChildrenGrades() : GRADE_OPTIONS;
+  const [grade, setGrade] = useState<string>(userRole === 'parent' ? getDefaultGrade() : '2º Ano Fund.');
   const [keywords, setKeywords] = useState<string>('');
   const [contentType, setContentType] = useState<ContentType>('story');
   const [price, setPrice] = useState<number>(0);
@@ -63,6 +109,18 @@ const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPla
     }
   }, [chatHistory]);
 
+  // Initialize age and grade from children when user is parent
+  useEffect(() => {
+    if (userRole === 'parent' && children && children.length > 0) {
+      const ageRange = getChildrenAgeRange();
+      if (ageRange) {
+        setMinAge(ageRange.min);
+        setMaxAge(ageRange.max);
+      }
+      setGrade(getDefaultGrade());
+    }
+  }, [children, userRole]);
+
   // Initialization Logic
   useEffect(() => {
     if (initialSource) {
@@ -72,9 +130,24 @@ const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPla
         setTitle(initialSource.title);
         setDescription(initialSource.description);
         setTopic(initialSource.title); // Fallback
-        setMinAge(initialSource.ageRange.min);
-        setMaxAge(initialSource.ageRange.max);
-        setGrade(initialSource.grade || '2º Ano Fund.');
+        // For parents, only allow editing if grade matches children's grades
+        if (userRole === 'parent' && children && children.length > 0) {
+          const allowedGrades = getChildrenGrades();
+          if (initialSource.grade && allowedGrades.includes(initialSource.grade)) {
+            setGrade(initialSource.grade);
+          } else {
+            setGrade(getDefaultGrade());
+          }
+          const ageRange = getChildrenAgeRange();
+          if (ageRange) {
+            setMinAge(ageRange.min);
+            setMaxAge(ageRange.max);
+          }
+        } else {
+          setMinAge(initialSource.ageRange.min);
+          setMaxAge(initialSource.ageRange.max);
+          setGrade(initialSource.grade || '2º Ano Fund.');
+        }
         setContentType(initialSource.type);
         setPrice(initialSource.price);
         setKeywords(initialSource.keywords?.join(', ') || '');
@@ -83,16 +156,25 @@ const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPla
       } else {
         // Remix Mode
         setMode('manual');
-        setMinAge(initialSource.ageRange.min);
-        setMaxAge(initialSource.ageRange.max);
-        setGrade(initialSource.grade || '2º Ano Fund.');
+        if (userRole === 'parent' && children && children.length > 0) {
+          const ageRange = getChildrenAgeRange();
+          if (ageRange) {
+            setMinAge(ageRange.min);
+            setMaxAge(ageRange.max);
+          }
+          setGrade(getDefaultGrade());
+        } else {
+          setMinAge(initialSource.ageRange.min);
+          setMaxAge(initialSource.ageRange.max);
+          setGrade(initialSource.grade || '2º Ano Fund.');
+        }
         // Default to a different type for variety
         if (initialSource.type === 'story') setContentType('quiz');
         else if (initialSource.type === 'quiz') setContentType('summary');
         else setContentType('story');
       }
     }
-  }, [initialSource, isEditing]);
+  }, [initialSource, isEditing, children, userRole]);
 
   if (userPlan !== 'premium' && userRole !== 'teacher') {
     return (
@@ -106,6 +188,27 @@ const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPla
         </p>
         <button className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition">
           Fazer Upgrade Agora
+        </button>
+      </div>
+    );
+  }
+
+  // For parents, check if they have children registered
+  if (userRole === 'parent' && (!children || children.length === 0)) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center p-8 text-center">
+        <div className="bg-slate-100 p-8 rounded-full mb-6">
+          <Wand2 className="w-16 h-16 text-slate-400" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-800 mb-2">Cadastre um Filho Primeiro</h2>
+        <p className="text-slate-600 max-w-md mb-6">
+          Para criar conteúdo, você precisa cadastrar pelo menos um filho no perfil. O conteúdo será criado automaticamente para a série do seu filho.
+        </p>
+        <button 
+          onClick={() => window.location.hash = '#family'}
+          className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition"
+        >
+          Ir para Minha Família
         </button>
       </div>
     );
@@ -355,36 +458,94 @@ const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPla
             
             <div className="space-y-4">
                  {/* Age Range Selection */}
-                 <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">Faixa Etária Recomendada</label>
-                    <div className="flex items-center gap-2">
-                        <div className="relative flex-1">
-                            <input 
-                                type="number" min="2" max="18"
-                                value={minAge}
-                                onChange={(e) => setMinAge(Number(e.target.value))}
-                                className="w-full p-2 pl-3 rounded-lg border border-slate-200 text-sm font-bold text-slate-600 bg-white"
-                            />
-                            <span className="absolute right-2 top-2 text-xs text-slate-400">anos</span>
-                        </div>
-                        <span className="text-slate-400 font-bold">até</span>
-                        <div className="relative flex-1">
-                            <input 
-                                type="number" min={minAge} max="18"
-                                value={maxAge}
-                                onChange={(e) => setMaxAge(Number(e.target.value))}
-                                className="w-full p-2 pl-3 rounded-lg border border-slate-200 text-sm font-bold text-slate-600 bg-white"
-                            />
-                            <span className="absolute right-2 top-2 text-xs text-slate-400">anos</span>
-                        </div>
-                    </div>
-                 </div>
+                 {userRole === 'parent' && children && children.length > 0 ? (
+                   <div>
+                     <label className="block text-sm font-bold text-slate-700 mb-2">
+                       Faixa Etária (baseada nos seus filhos)
+                     </label>
+                     <div className="flex items-center gap-2">
+                       <div className="relative flex-1">
+                         <input 
+                           type="number" 
+                           value={minAge}
+                           readOnly
+                           disabled
+                           className="w-full p-2 pl-3 rounded-lg border border-slate-200 text-sm font-bold text-slate-600 bg-slate-50 cursor-not-allowed"
+                         />
+                         <span className="absolute right-2 top-2 text-xs text-slate-400">anos</span>
+                       </div>
+                       <span className="text-slate-400 font-bold">até</span>
+                       <div className="relative flex-1">
+                         <input 
+                           type="number" 
+                           value={maxAge}
+                           readOnly
+                           disabled
+                           className="w-full p-2 pl-3 rounded-lg border border-slate-200 text-sm font-bold text-slate-600 bg-slate-50 cursor-not-allowed"
+                         />
+                         <span className="absolute right-2 top-2 text-xs text-slate-400">anos</span>
+                       </div>
+                     </div>
+                     <p className="text-xs text-slate-500 mt-1">
+                       Calculado automaticamente a partir das idades dos seus filhos
+                     </p>
+                   </div>
+                 ) : (
+                   <div>
+                     <label className="block text-sm font-bold text-slate-700 mb-2">Faixa Etária Recomendada</label>
+                     <div className="flex items-center gap-2">
+                       <div className="relative flex-1">
+                         <input 
+                           type="number" min="2" max="18"
+                           value={minAge}
+                           onChange={(e) => setMinAge(Number(e.target.value))}
+                           className="w-full p-2 pl-3 rounded-lg border border-slate-200 text-sm font-bold text-slate-600 bg-white"
+                         />
+                         <span className="absolute right-2 top-2 text-xs text-slate-400">anos</span>
+                       </div>
+                       <span className="text-slate-400 font-bold">até</span>
+                       <div className="relative flex-1">
+                         <input 
+                           type="number" min={minAge} max="18"
+                           value={maxAge}
+                           onChange={(e) => setMaxAge(Number(e.target.value))}
+                           className="w-full p-2 pl-3 rounded-lg border border-slate-200 text-sm font-bold text-slate-600 bg-white"
+                         />
+                         <span className="absolute right-2 top-2 text-xs text-slate-400">anos</span>
+                       </div>
+                     </div>
+                   </div>
+                 )}
 
                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">Série</label>
-                    <select value={grade} onChange={(e) => setGrade(e.target.value)} className="w-full p-2 rounded-lg border border-slate-200 text-sm font-bold text-slate-600 bg-white">
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Série
+                      {userRole === 'parent' && children && children.length > 0 && (
+                        <span className="text-xs text-slate-500 font-normal ml-2">(apenas séries dos seus filhos)</span>
+                      )}
+                    </label>
+                    {userRole === 'parent' && children && children.length > 0 ? (
+                      <select 
+                        value={grade} 
+                        onChange={(e) => setGrade(e.target.value)} 
+                        className="w-full p-2 rounded-lg border border-slate-200 text-sm font-bold text-slate-600 bg-white"
+                      >
+                        {availableGrades.map(g => <option key={g} value={g}>{g}</option>)}
+                      </select>
+                    ) : (
+                      <select 
+                        value={grade} 
+                        onChange={(e) => setGrade(e.target.value)} 
+                        className="w-full p-2 rounded-lg border border-slate-200 text-sm font-bold text-slate-600 bg-white"
+                      >
                         {GRADE_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
+                      </select>
+                    )}
+                    {userRole === 'parent' && children && children.length === 0 && (
+                      <p className="text-xs text-red-500 mt-1">
+                        ⚠️ Você precisa cadastrar pelo menos um filho para criar conteúdo
+                      </p>
+                    )}
                  </div>
             </div>
           </div>
