@@ -1,8 +1,9 @@
 import { Router, Response } from 'express';
 import { AppDataSource } from '../config/database';
 import { ContentItem } from '../entities/ContentItem';
+import { User } from '../entities/User';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
-import { generateEducationalContent, chatForCreation } from '../services/gemini.service';
+import { generateEducationalContent, chatForCreation, validateContentRequest } from '../services/gemini.service';
 
 const router = Router();
 
@@ -84,13 +85,48 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       isAiGenerated
     } = req.body;
 
-    if (!title || !description || !type || !subject || !ageRange || !data) {
-      return res.status(400).json({ error: 'Campos obrigatórios faltando' });
+    // Validação detalhada dos campos obrigatórios
+    const missingFields: string[] = [];
+    if (!title) missingFields.push('title');
+    if (!description) missingFields.push('description');
+    if (!type) missingFields.push('type');
+    if (!subject) missingFields.push('subject');
+    if (!ageRange) missingFields.push('ageRange');
+    if (!grade) missingFields.push('grade');
+    if (!data) missingFields.push('data');
+    
+    if (missingFields.length > 0) {
+      console.error('Campos faltando:', missingFields);
+      console.error('Body recebido:', JSON.stringify(req.body, null, 2));
+      return res.status(400).json({ 
+        error: 'Campos obrigatórios faltando',
+        missingFields: missingFields
+      });
     }
 
     // Check if user can create content (premium or teacher)
     if (req.user!.plan !== 'premium' && req.user!.role !== 'teacher') {
       return res.status(403).json({ error: 'Apenas usuários Premium ou Professores podem criar conteúdo' });
+    }
+
+    // For parents, validate that grade matches one of their children's grades
+    if (req.user!.role === 'parent') {
+      const userRepository = AppDataSource.getRepository(User);
+      const userWithChildren = await userRepository.findOne({
+        where: { id: req.user!.id },
+        relations: ['children']
+      });
+
+      if (!userWithChildren || !userWithChildren.children || userWithChildren.children.length === 0) {
+        return res.status(400).json({ error: 'Você precisa cadastrar pelo menos um filho para criar conteúdo' });
+      }
+
+      const childrenGrades = userWithChildren.children.map(child => child.grade);
+      if (grade && !childrenGrades.includes(grade)) {
+        return res.status(403).json({ 
+          error: `Você só pode criar conteúdo para as séries dos seus filhos: ${childrenGrades.join(', ')}` 
+        });
+      }
     }
 
     const contentRepository = AppDataSource.getRepository(ContentItem);
@@ -171,6 +207,16 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Conteúdo não encontrado' });
     }
 
+    // Proteger jogo de tabuada (não pode ser deletado)
+    const isTabuadaGame = content.id === '5' || 
+      (content.type === 'game' && (content.data as any)?.gameType === 'multiplication-table') ||
+      (content.title?.toLowerCase().includes('tabuada')) ||
+      (content.authorId === 'sys' && content.type === 'game');
+
+    if (isTabuadaGame) {
+      return res.status(403).json({ error: 'O jogo de tabuada é fixo e não pode ser removido' });
+    }
+
     // Check ownership
     if (content.authorId !== req.user!.id) {
       return res.status(403).json({ error: 'Você não tem permissão para deletar este conteúdo' });
@@ -188,7 +234,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 // Generate content with AI
 router.post('/generate', async (req: AuthRequest, res: Response) => {
   try {
-    const { prompt, age, contentType, files, sourceContext } = req.body;
+    const { prompt, age, contentType, files, sourceContext, grade, refinementPrompt, sizeParams } = req.body;
 
     if (!prompt || !age || !contentType) {
       return res.status(400).json({ error: 'Prompt, idade e tipo de conteúdo são obrigatórios' });
@@ -199,18 +245,53 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: 'Apenas usuários Premium ou Professores podem gerar conteúdo com IA' });
     }
 
+    // MIDDLEWARE DE VALIDAÇÃO: Verificar se precisa de confirmação de tamanho (passa grade para validação)
+    const validation = validateContentRequest(prompt, contentType, grade);
+    
+    if (validation.needsConfirmation) {
+      return res.status(200).json({
+        needsConfirmation: true,
+        confirmationMessage: validation.confirmationMessage,
+        contentType: validation.contentType
+      });
+    }
+
     const generated = await generateEducationalContent(
       prompt,
       age,
       contentType,
       files || [],
-      sourceContext
+      sourceContext,
+      grade,
+      refinementPrompt,
+      sizeParams
     );
 
     res.json({ generated });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Generate content error:', error);
-    res.status(500).json({ error: 'Erro ao gerar conteúdo' });
+    console.error('Error stack:', error.stack);
+    
+    // Retornar mensagem de erro mais específica
+    let errorMessage = error.message || 'Erro ao gerar conteúdo';
+    let statusCode = error.status || 500;
+    
+    // Melhorar mensagens de erro comuns
+    if (errorMessage.includes('GEMINI_API_KEY')) {
+      errorMessage = 'Erro de configuração: A chave da API do Gemini não está configurada no servidor.';
+      statusCode = 500;
+    } else if (errorMessage.includes('Unsupported MIME type')) {
+      errorMessage = 'Tipo de arquivo não suportado. Use apenas PDF ou imagens (JPG, PNG).';
+      statusCode = 400;
+    } else if (errorMessage.includes('400 Bad Request')) {
+      errorMessage = 'Erro na requisição. Verifique os arquivos enviados e tente novamente.';
+      statusCode = 400;
+    }
+    
+    res.status(statusCode).json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

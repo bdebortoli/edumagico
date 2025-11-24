@@ -13,9 +13,10 @@ import TeacherProfile from './components/TeacherProfile';
 import AdminDashboard from './components/AdminDashboard';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
+import FeedbackPage from './components/FeedbackPage';
 import { User, ContentItem, ChildProfile, ActivityHistory } from './types';
 import { db } from './services/database';
-import { LayoutDashboard, PlusCircle, Library, LogOut, Settings, Gamepad2, BookOpen, ShoppingBag, Trophy, Sparkles, Users, CreditCard, BarChart3, Split, Filter, User as UserIcon, Search, Calendar, Bell, DollarSign, Award, Clock, Shield, Activity } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, Library, LogOut, Settings, Gamepad2, BookOpen, ShoppingBag, Trophy, Sparkles, Users, CreditCard, BarChart3, Split, Filter, User as UserIcon, Search, Calendar, Bell, DollarSign, Award, Clock, Shield, Activity, Edit } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -38,7 +39,20 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [showLogin, setShowLogin] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'teacher_dash' | 'create' | 'library' | 'player' | 'marketplace' | 'leaderboard' | 'subscription' | 'family' | 'analytics' | 'profile' | 'admin' | 'admin_dashboard' | 'admin_users' | 'admin_content' | 'admin_subscriptions' | 'admin_notifications' | 'admin_financial' | 'admin_rankings' | 'admin_reports' | 'admin_accesses' | 'admin_permissions'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'teacher_dash' | 'create' | 'library' | 'player' | 'marketplace' | 'leaderboard' | 'subscription' | 'family' | 'analytics' | 'profile' | 'admin' | 'admin_dashboard' | 'admin_users' | 'admin_content' | 'admin_subscriptions' | 'admin_notifications' | 'admin_financial' | 'admin_rankings' | 'admin_reports' | 'admin_accesses' | 'admin_permissions' | 'feedback'>('dashboard');
+  const [feedbackState, setFeedbackState] = useState<{
+    type: 'success' | 'error' | 'warning' | 'info';
+    title: string;
+    message: string;
+    details?: string;
+    actionLabel?: string;
+    onAction?: () => void;
+    secondaryActionLabel?: string;
+    onSecondaryAction?: () => void;
+  } | null>(null);
+  
+  // Estado para controlar se a aplicação está pronta
+  const [isAppReady, setIsAppReady] = useState(false);
   
   // Data Source now comes from Persistence Layer
   const [contentList, setContentList] = useState<ContentItem[]>([]);
@@ -50,17 +64,107 @@ function App() {
 
   // Library Filter States
   const [activeChildId, setActiveChildId] = useState<string>('');
-  const [filterSubject, setFilterSubject] = useState<string>('Todos');
+  const [filterSubject, setFilterSubject] = useState<string>('Todas');
+  const [filterContentType, setFilterContentType] = useState<string>('Todas'); // Novo filtro por tipo de conteúdo
+  const [filterOrigin, setFilterOrigin] = useState<string>('Todas'); // Filtro por origem: 'Todas', 'Plataforma', 'Meus'
 
   // Marketplace Filter States
   const [marketSubject, setMarketSubject] = useState<string>('Todos');
   const [marketGrade, setMarketGrade] = useState<string>('Todos');
   const [marketTeacher, setMarketTeacher] = useState<string>('');
 
+  // Função para recarregar usuário completo do backend
+  const reloadUserFromBackend = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        const updatedUser = data.user;
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        return updatedUser;
+      }
+    } catch (error) {
+      console.error('Erro ao recarregar usuário:', error);
+    }
+    return null;
+  };
+
+  // Load content from backend
+  const loadContentFromBackend = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/content`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const backendContent = data.content || [];
+        // Merge with local content (for backward compatibility)
+        const localContent = db.getContent();
+        const allContent = [...backendContent, ...localContent.filter(lc => !backendContent.find(bc => bc.id === lc.id))];
+        
+        // Garantir que jogo de tabuada sempre esteja presente
+        const tabuadaExists = allContent.find(c => 
+          c.id === '5' || 
+          (c.type === 'game' && (c.data as any)?.gameType === 'multiplication-table') ||
+          (c.title?.toLowerCase().includes('tabuada'))
+        );
+        
+        if (!tabuadaExists) {
+          const seedTabuada = {
+            id: '5',
+            title: 'Jogo da Tabuada Interativo',
+            description: 'Descubra todas as multiplicações da tabuada clicando nas casas! Aprenda de forma divertida e interativa.',
+            type: 'game' as const,
+            authorId: 'sys',
+            authorName: 'EduMágico',
+            authorRole: 'teacher' as const,
+            createdAt: '2023-10-15T10:00:00Z',
+            subject: 'Matemática',
+            ageRange: { min: 7, max: 10 },
+            grade: '2º Ano Fund.',
+            keywords: ['tabuada', 'multiplicação', 'matemática', 'jogo'],
+            isAiGenerated: false,
+            price: 0,
+            salesCount: 0,
+            data: {
+              gameType: 'multiplication-table',
+              config: {}
+            }
+          };
+          allContent.unshift(seedTabuada); // Adiciona no início
+        }
+        
+        setContentList(allContent);
+        // Also save to local for offline access
+        allContent.forEach(content => db.saveContent(content));
+      }
+    } catch (error) {
+      console.error('Error loading content from backend:', error);
+      // Fallback to local content
+      const loadedContent = db.getContent();
+      setContentList(loadedContent);
+    }
+  };
+
   // Load Initial Data
   useEffect(() => {
     const loadedContent = db.getContent();
     setContentList(loadedContent);
+    
+    // Load from backend if authenticated
+    if (isAuthenticated) {
+      loadContentFromBackend();
+    }
     
     // Verifica se há token e usuário salvos
     const token = localStorage.getItem('token');
@@ -72,20 +176,69 @@ function App() {
         setUser(userData);
         setIsAuthenticated(true);
         
-        // Redireciona baseado no role
-        if (userData.role === 'admin') {
-          setCurrentView('admin_dashboard');
-        } else if (userData.role === 'teacher') {
-          setCurrentView('teacher_dash');
-        } else {
-          setCurrentView('dashboard');
+        // Recarrega usuário do backend para ter dados atualizados (incluindo children)
+        reloadUserFromBackend();
+        
+        // Verificar hash da URL para roteamento
+        try {
+          const hash = window.location.hash;
+          if (hash) {
+            const hashParts = hash.substring(1).split('?');
+            const view = hashParts[0] as any;
+            const validViews = ['create', 'library', 'dashboard', 'teacher_dash', 'marketplace', 'leaderboard', 'subscription', 'family', 'analytics', 'profile', 'admin_dashboard', 'admin_users', 'admin_content', 'admin_subscriptions', 'admin_notifications', 'admin_financial', 'admin_rankings', 'admin_reports', 'admin_accesses', 'admin_permissions', 'feedback'];
+            if (view && validViews.includes(view)) {
+              setCurrentView(view);
+            } else {
+              // Redireciona baseado no role se não houver hash válido
+              if (userData.role === 'admin') {
+                setCurrentView('admin_dashboard');
+              } else if (userData.role === 'teacher') {
+                setCurrentView('teacher_dash');
+              } else {
+                setCurrentView('dashboard');
+              }
+            }
+          } else {
+            // Redireciona baseado no role
+            if (userData.role === 'admin') {
+              setCurrentView('admin_dashboard');
+            } else if (userData.role === 'teacher') {
+              setCurrentView('teacher_dash');
+            } else {
+              setCurrentView('dashboard');
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao processar hash da URL:', error);
+          // Fallback: redireciona baseado no role
+          if (userData.role === 'admin') {
+            setCurrentView('admin_dashboard');
+          } else if (userData.role === 'teacher') {
+            setCurrentView('teacher_dash');
+          } else {
+            setCurrentView('dashboard');
+          }
         }
       } catch (error) {
         console.error('Erro ao carregar usuário salvo:', error);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
       }
+    } else {
+      // Se não autenticado, verificar se há hash para redirecionar após login
+      try {
+        const hash = window.location.hash;
+        if (hash && hash.startsWith('#create')) {
+          // Manter a intenção de ir para create após login
+          // Isso será tratado após autenticação
+        }
+      } catch (error) {
+        console.error('Erro ao verificar hash:', error);
+      }
     }
+    
+    // Marcar aplicação como pronta após inicialização
+    setIsAppReady(true);
   }, []);
   
   // Carrega marketplace do backend quando autenticado
@@ -108,6 +261,13 @@ function App() {
         }
       };
       loadMarketplace();
+    }
+  }, [isAuthenticated, user, currentView]);
+
+  // Carrega conteúdo do backend quando autenticado e na biblioteca
+  useEffect(() => {
+    if (isAuthenticated && user && (currentView === 'library' || currentView === 'dashboard')) {
+      loadContentFromBackend();
     }
   }, [isAuthenticated, user, currentView]);
 
@@ -134,15 +294,21 @@ function App() {
   };
 
   // Login real via API
-  const handleLoginSuccess = (userData: User, token: string) => {
-    setUser(userData);
+  const handleLoginSuccess = async (userData: User, token: string) => {
+    // Recarrega usuário completo do backend para garantir que children estão incluídos
+    const fullUser = await reloadUserFromBackend() || userData;
+    
+    setUser(fullUser);
     setIsAuthenticated(true);
     setShowLogin(false);
     
+    // Salva no localStorage
+    localStorage.setItem('user', JSON.stringify(fullUser));
+    
     // Redireciona baseado no role
-    if (userData.role === 'admin') {
+    if (fullUser.role === 'admin') {
       setCurrentView('admin_dashboard');
-    } else if (userData.role === 'teacher') {
+    } else if (fullUser.role === 'teacher') {
       setCurrentView('teacher_dash');
     } else {
       setCurrentView('dashboard');
@@ -163,14 +329,199 @@ function App() {
       db.saveUser(updatedUser);
   };
 
-  const handleContentCreated = (newContent: ContentItem) => {
-    // Check if updating existing (Edit) or New
-    db.saveContent(newContent); // Persist
-    const updatedList = db.getContent();
-    setContentList(updatedList);
+  const handleContentCreated = async (newContent: ContentItem) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setFeedbackState({
+        type: 'error',
+        title: 'Autenticação Necessária',
+        message: 'Você precisa estar autenticado para criar conteúdo.',
+        details: 'Por favor, faça login novamente para continuar.',
+        actionLabel: 'Fazer Login',
+        onAction: () => {
+          setFeedbackState(null);
+          setIsAuthenticated(false);
+          setUser(null);
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setCurrentView('dashboard');
+        },
+        secondaryActionLabel: 'Voltar',
+        onSecondaryAction: () => {
+          setFeedbackState(null);
+          setCurrentView(user?.role === 'teacher' ? 'teacher_dash' : 'library');
+        }
+      });
+      setCurrentView('feedback');
+      return;
+    }
 
-    setRemixItem(null);
-    setCurrentView(user?.role === 'teacher' ? 'teacher_dash' : 'library');
+    try {
+      // Salvar no backend
+      const response = await fetch(`${API_BASE}/content`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title: newContent.title,
+          description: newContent.description,
+          type: newContent.type,
+          subject: newContent.subject || 'Matemática',
+          ageRange: newContent.ageRange,
+          grade: newContent.grade || '',
+          keywords: newContent.keywords || [],
+          resources: newContent.resources || {},
+          price: newContent.price || 0,
+          data: newContent.data,
+          isAiGenerated: newContent.isAiGenerated || false
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Erro ao salvar conteúdo:', error);
+        console.error('Conteúdo enviado:', {
+          title: newContent.title,
+          description: newContent.description,
+          type: newContent.type,
+          subject: newContent.subject,
+          ageRange: newContent.ageRange,
+          grade: newContent.grade,
+          data: newContent.data ? 'presente' : 'ausente'
+        });
+
+        // Tratamento específico de erros
+        let errorType: 'error' | 'warning' = 'error';
+        let errorTitle = 'Erro ao Salvar Conteúdo';
+        let errorMessage = error.error || 'Erro ao salvar conteúdo';
+        let errorDetails = '';
+        let actionLabel = 'Tentar Novamente';
+        let secondaryActionLabel = 'Voltar';
+
+        if (response.status === 400) {
+          errorType = 'warning';
+          errorTitle = 'Campos Obrigatórios Faltando';
+          errorMessage = 'Alguns campos obrigatórios não foram preenchidos corretamente.';
+          if (error.missingFields && Array.isArray(error.missingFields)) {
+            errorDetails = `Campos faltando: ${error.missingFields.join(', ')}`;
+          }
+          actionLabel = 'Corrigir e Tentar Novamente';
+        } else if (response.status === 403) {
+          errorType = 'warning';
+          errorTitle = 'Permissão Insuficiente';
+          errorMessage = 'Você não tem permissão para criar conteúdo.';
+          errorDetails = 'Apenas usuários Premium ou Professores podem criar conteúdo. Faça upgrade para continuar.';
+          actionLabel = 'Fazer Upgrade';
+          secondaryActionLabel = 'Voltar';
+        } else if (response.status === 401) {
+          errorType = 'error';
+          errorTitle = 'Sessão Expirada';
+          errorMessage = 'Sua sessão expirou. Por favor, faça login novamente.';
+          actionLabel = 'Fazer Login';
+          secondaryActionLabel = 'Voltar';
+        }
+
+        setFeedbackState({
+          type: errorType,
+          title: errorTitle,
+          message: errorMessage,
+          details: errorDetails,
+          actionLabel,
+          onAction: () => {
+            setFeedbackState(null);
+            if (response.status === 403) {
+              setCurrentView('subscription');
+            } else if (response.status === 401) {
+              setIsAuthenticated(false);
+              setUser(null);
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+              setCurrentView('dashboard');
+            } else {
+              setCurrentView('create');
+            }
+          },
+          secondaryActionLabel,
+          onSecondaryAction: () => {
+            setFeedbackState(null);
+            setCurrentView(user?.role === 'teacher' ? 'teacher_dash' : 'library');
+          }
+        });
+        setCurrentView('feedback');
+        return;
+      }
+
+      const result = await response.json();
+      const savedContent = result.content;
+
+      // Atualizar lista local
+      db.saveContent(savedContent);
+      
+      // Adicionar o conteúdo recém-criado à lista imediatamente
+      setContentList(prev => {
+        // Verificar se já existe para evitar duplicatas
+        const exists = prev.find(c => c.id === savedContent.id);
+        if (exists) {
+          return prev.map(c => c.id === savedContent.id ? savedContent : c);
+        }
+        return [savedContent, ...prev];
+      });
+      
+      // Recarregar conteúdo do backend para ter lista atualizada
+      await loadContentFromBackend();
+
+      // Mostrar página de sucesso
+      setFeedbackState({
+        type: 'success',
+        title: 'Conteúdo Criado com Sucesso! 🎉',
+        message: `"${newContent.title}" foi criado e salvo com sucesso!`,
+        details: `Tipo: ${newContent.type === 'quiz' ? 'Quiz' : newContent.type === 'story' ? 'História' : newContent.type === 'summary' ? 'Resumo' : 'Jogo'}\nMatéria: ${newContent.subject}\nSérie: ${newContent.grade}`,
+        actionLabel: 'Ver na Biblioteca',
+        onAction: () => {
+          setFeedbackState(null);
+          setRemixItem(null);
+          setCurrentView(user?.role === 'teacher' ? 'teacher_dash' : 'library');
+        },
+        secondaryActionLabel: 'Criar Outro',
+        onSecondaryAction: () => {
+          setFeedbackState(null);
+          setRemixItem(null);
+          setCurrentView('create');
+        }
+      });
+      setCurrentView('feedback');
+    } catch (error: any) {
+      console.error('Erro ao salvar conteúdo:', error);
+      
+      // Verificar se é erro de conexão
+      let errorMessage = error.message || 'Erro ao salvar conteúdo. Tente novamente.';
+      let errorDetails = '';
+      
+      if (error.message?.includes('fetch') || error.message?.includes('Failed to fetch')) {
+        errorMessage = 'Não foi possível conectar ao servidor.';
+        errorDetails = 'Verifique sua conexão com a internet e tente novamente.';
+      }
+
+      setFeedbackState({
+        type: 'error',
+        title: 'Erro ao Salvar Conteúdo',
+        message: errorMessage,
+        details: errorDetails,
+        actionLabel: 'Tentar Novamente',
+        onAction: () => {
+          setFeedbackState(null);
+          setCurrentView('create');
+        },
+        secondaryActionLabel: 'Voltar',
+        onSecondaryAction: () => {
+          setFeedbackState(null);
+          setCurrentView(user?.role === 'teacher' ? 'teacher_dash' : 'library');
+        }
+      });
+      setCurrentView('feedback');
+    }
   };
 
   const handleRemix = (content: ContentItem) => {
@@ -184,11 +535,64 @@ function App() {
   }
 
   const handleDelete = (id: string) => {
+      // Proteger jogo de tabuada (ID '5' ou gameType 'multiplication-table')
+      const content = contentList.find(c => c.id === id);
+      if (content) {
+        const isTabuadaGame = content.id === '5' || 
+          (content.type === 'game' && (content.data as any)?.gameType === 'multiplication-table') ||
+          (content.title?.toLowerCase().includes('tabuada'));
+        
+        if (isTabuadaGame) {
+          alert('O jogo de tabuada é fixo e não pode ser removido.');
+          return;
+        }
+      }
+
       if(confirm("Tem certeza?")) {
           db.deleteContent(id);
           setContentList(db.getContent());
       }
   }
+
+  const handleEditTitle = async (contentId: string, newTitle: string) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('Você precisa estar autenticado para editar o título.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/content/${contentId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ title: newTitle })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(`Erro ao editar título: ${error.error || 'Erro desconhecido'}`);
+        return;
+      }
+
+      const result = await response.json();
+      const updatedContent = result.content;
+
+      // Atualizar lista local
+      setContentList(prev => prev.map(c => c.id === contentId ? updatedContent : c));
+      db.saveContent(updatedContent);
+
+      // Se o conteúdo selecionado for o mesmo, atualizar também
+      if (selectedContent && selectedContent.id === contentId) {
+        setSelectedContent(updatedContent);
+      }
+    } catch (error: any) {
+      console.error('Erro ao editar título:', error);
+      alert('Erro ao editar título. Tente novamente.');
+    }
+  };
 
   const handlePlayContent = (content: ContentItem) => {
     // Check ownership
@@ -304,8 +708,30 @@ function App() {
     }
   };
 
-  const handleUpgrade = (plan: 'basic'|'premium', cycle: 'monthly'|'yearly') => {
+  const handleUpgrade = async (plan: 'basic'|'premium', cycle: 'monthly'|'yearly') => {
     if (!user) return;
+    
+    // Busca o usuário atualizado do backend para garantir que está sincronizado
+    const token = localStorage.getItem('token') || '';
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          updateUserState(data.user);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching updated user:', error);
+    }
+    
+    // Fallback: atualiza localmente se não conseguir buscar do backend
     const updated = {
         ...user,
         plan: plan,
@@ -319,38 +745,143 @@ function App() {
     updateUserState(updated as User);
   };
 
-  const handleUpdateChildren = (newChildren: ChildProfile[]) => {
+  const handleUpdateChildren = async (newChildren: ChildProfile[]) => {
     if (!user) return;
+    
+    // Atualiza estado local imediatamente
     const updated = { ...user, children: newChildren };
-    updateUserState(updated);
+    setUser(updated);
+    
+    // Atualiza localStorage
+    localStorage.setItem('user', JSON.stringify(updated));
+    
+    // Recarrega usuário completo do backend para garantir sincronização
+    await reloadUserFromBackend();
+    
     if (activeChildId && !newChildren.find(c => c.id === activeChildId)) {
         setActiveChildId(newChildren.length > 0 ? newChildren[0].id : '');
     }
   };
 
+  // Helper function to get available subjects based on education level
+  const getAvailableSubjects = (educationLevel?: string): string[] => {
+    if (!educationLevel) {
+      // Se não tiver educationLevel, retorna todas as matérias
+      return ['Matemática', 'Ciências', 'Português', 'Geografia', 'História', 'Inglês', 'Física', 'Química', 'Biologia', 'Filosofia', 'Arte', 'Espanhol', 'Psicomotricidade', 'Redação'];
+    }
+
+    switch (educationLevel) {
+      case 'fundamental1':
+      case 'fundamental2':
+        // Fundamental 1 e 2: Matemática, Ciências, Português, Geografia, História, Inglês
+        return ['Matemática', 'Ciências', 'Português', 'Geografia', 'História', 'Inglês'];
+      case 'ensino-medio':
+        // Ensino Médio: Matemática, Física, Química, Biologia, Português, Geografia, História, Inglês e Espanhol
+        return ['Matemática', 'Física', 'Química', 'Biologia', 'Português', 'Geografia', 'História', 'Inglês', 'Espanhol'];
+      case 'pre-escola':
+        // Pré-escola: matérias mais básicas
+        return ['Matemática', 'Português', 'Arte', 'Psicomotricidade'];
+      default:
+        return ['Matemática', 'Ciências', 'Português', 'Geografia', 'História', 'Inglês'];
+    }
+  };
+
   // --- Filter Logic ---
   const getFilteredContent = () => {
+    // Garantir que jogo de tabuada sempre esteja presente
+    const tabuadaGame = contentList.find(c => 
+      c.id === '5' || 
+      (c.type === 'game' && (c.data as any)?.gameType === 'multiplication-table') ||
+      (c.title?.toLowerCase().includes('tabuada'))
+    );
+    
+    // Se não encontrar, adicionar do seed
+    if (!tabuadaGame) {
+      const seedTabuada = {
+        id: '5',
+        title: 'Jogo da Tabuada Interativo',
+        description: 'Descubra todas as multiplicações da tabuada clicando nas casas! Aprenda de forma divertida e interativa.',
+        type: 'game' as const,
+        authorId: 'sys',
+        authorName: 'EduMágico',
+        authorRole: 'teacher' as const,
+        createdAt: '2023-10-15T10:00:00Z',
+        subject: 'Matemática',
+        ageRange: { min: 7, max: 10 },
+        grade: '2º Ano Fund.',
+        keywords: ['tabuada', 'multiplicação', 'matemática', 'jogo'],
+        isAiGenerated: false,
+        price: 0,
+        salesCount: 0,
+        data: {
+          gameType: 'multiplication-table',
+          config: {}
+        }
+      };
+      contentList.push(seedTabuada);
+      db.saveContent(seedTabuada);
+    }
+
     return contentList.filter(item => {
         // Logic: Show items that are (Owned by me OR Free) AND NOT (Paid items by others unless purchased copy exists)
         // In our simple DB, purchased items are cloned with my ID.
         // So "My Library" = items where authorId is ME (created or bought) OR items that are FREE system items.
         
-        const isMyContent = item.authorId === user?.id;
-        const isSystemContent = item.authorId === 'sys';
+        // Comparar IDs como strings para evitar problemas de tipo
+        const isMyContent = String(item.authorId) === String(user?.id);
+        const isSystemContent = String(item.authorId) === 'sys';
         
         if (!isMyContent && !isSystemContent) return false;
 
-        if (filterSubject !== 'Todos' && item.subject !== filterSubject) return false;
+        // Filtro por origem
+        if (filterOrigin === 'Plataforma' && !isSystemContent) return false;
+        if (filterOrigin === 'Meus' && !isMyContent) return false;
 
-        if (activeChildId && user?.children) {
+        // Exceção: Jogo da Tabuada sempre aparece para todos os alunos
+        const isTabuadaGame = item.id === '5' || 
+          (item.type === 'game' && (item.data as any)?.gameType === 'multiplication-table') ||
+          (item.title?.toLowerCase().includes('tabuada'));
+
+        // Filtro por matéria (exceto jogo da tabuada)
+        if (!isTabuadaGame && filterSubject !== 'Todas' && item.subject !== filterSubject) return false;
+
+        // Filtro por tipo de conteúdo
+        if (filterContentType !== 'Todas' && item.type !== filterContentType) return false;
+
+        // Filtrar matérias baseado no educationLevel do aluno selecionado (exceto jogo da tabuada)
+        if (activeChildId && user?.children && !isTabuadaGame) {
+          const activeChild = user.children.find(c => c.id === activeChildId);
+          if (activeChild && activeChild.educationLevel) {
+            const availableSubjects = getAvailableSubjects(activeChild.educationLevel);
+            if (!availableSubjects.includes(item.subject)) return false;
+          }
+        }
+        
+        if (activeChildId && user?.children && !isTabuadaGame) {
             const activeChild = user.children.find(c => c.id === activeChildId);
             if (activeChild) {
-                // Check range: child's age must be within min/max (with 1 year buffer potentially)
-                // For stricter filtering: activeChild.age >= item.ageRange.min && activeChild.age <= item.ageRange.max
-                // For looser filtering (allow overlapping):
-                const min = item.ageRange.min - 1;
-                const max = item.ageRange.max + 1;
-                if (activeChild.age < min || activeChild.age > max) return false;
+                // Verifica série: conteúdo deve ser da série do aluno
+                if (item.grade && activeChild.grade !== item.grade) return false;
+                
+                // Verifica idade: idade do aluno deve estar dentro do range (com buffer de 1 ano)
+                const childAge = activeChild.birthDate 
+                  ? (() => {
+                      const birth = new Date(activeChild.birthDate);
+                      const today = new Date();
+                      let age = today.getFullYear() - birth.getFullYear();
+                      const monthDiff = today.getMonth() - birth.getMonth();
+                      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+                        age--;
+                      }
+                      return age;
+                    })()
+                  : activeChild.age;
+                
+                if (childAge !== undefined && childAge !== null) {
+                  const min = item.ageRange.min - 1;
+                  const max = item.ageRange.max + 1;
+                  if (childAge < min || childAge > max) return false;
+                }
             }
         }
         return true;
@@ -396,7 +927,47 @@ function App() {
     }
   }, [isAuthenticated, user, currentView]);
 
-  const uniqueSubjects = ['Todos', ...Array.from(new Set(contentList.map(c => c.subject))).sort()];
+  // Get available subjects based on active child's education level
+  const getFilteredSubjects = (): string[] => {
+    let subjects: string[] = [];
+    
+    if (activeChildId && user?.children) {
+      const activeChild = user.children.find(c => c.id === activeChildId);
+      if (activeChild && activeChild.educationLevel) {
+        // Retorna apenas as matérias permitidas para o nível de ensino do aluno selecionado
+        const availableSubjects = getAvailableSubjects(activeChild.educationLevel);
+        subjects = availableSubjects;
+      }
+    } else if (user?.children && user.children.length > 0) {
+      // Se não houver aluno selecionado, usa o primeiro aluno se existir
+      const firstChild = user.children[0];
+      if (firstChild.educationLevel) {
+        const availableSubjects = getAvailableSubjects(firstChild.educationLevel);
+        subjects = availableSubjects;
+      }
+    } else {
+      // Fallback: retorna matérias padrão do fundamental (caso não tenha aluno ou educationLevel)
+      subjects = ['Matemática', 'Ciências', 'Português', 'Geografia', 'História', 'Inglês'];
+    }
+    
+    // Ordena as matérias (exceto "Todas") e coloca "Todas" no início
+    const sortedSubjects = subjects.sort();
+    return ['Todas', ...sortedSubjects];
+  };
+
+  const uniqueSubjects = getFilteredSubjects();
+
+  // Aguardar inicialização antes de renderizar
+  if (!isAppReady) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-slate-600 font-bold">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     if (showRegister) {
@@ -512,7 +1083,7 @@ function App() {
            {currentView === 'player' ? null : !currentView.startsWith('admin_') && (
              <header className="flex justify-between items-center">
                 <h1 className="text-3xl font-black text-slate-800 font-fredoka capitalize tracking-tight">
-                  {currentView === 'dashboard' && `Olá, ${user?.name.split(' ')[0]}! 👋`}
+                  {currentView === 'dashboard' && `Olá, ${user?.name?.split(' ')[0] || 'Usuário'}! 👋`}
                   {currentView === 'teacher_dash' && `Sala dos Professores`}
                   {currentView === 'library' && 'Sua Biblioteca'}
                   {currentView === 'create' && (remixItem && user?.role === 'teacher' ? 'Editor de Conteúdo' : remixItem ? 'Estúdio de Remix' : 'Estúdio de Criação')}
@@ -563,7 +1134,7 @@ function App() {
 
               {/* Dashboard Content (Same as before) */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <DashboardCard title="Pontos Totais" value={user?.children?.[0].points || 0} icon={<Trophy className="text-yellow-500" />} color="bg-yellow-50 text-yellow-700" />
+                <DashboardCard title="Pontos Totais" value={user?.children?.[0]?.points || 0} icon={<Trophy className="text-yellow-500" />} color="bg-yellow-50 text-yellow-700" />
                 <DashboardCard title="Atividades" value={contentList.filter(c => c.authorId === user?.id).length} icon={<Library className="text-blue-500" />} color="bg-blue-50 text-blue-700" />
                 <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden cursor-pointer group" onClick={() => { setRemixItem(null); setCurrentView('create'); }}>
                   <div className="relative z-10">
@@ -580,7 +1151,14 @@ function App() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {getFilteredContent().slice(0, 3).map(content => (
-                    <ContentCard key={content.id} content={content} onClick={() => handlePlayContent(content)} onRemix={() => handleRemix(content)} />
+                    <ContentCard 
+                      key={content.id} 
+                      content={content} 
+                      onClick={() => handlePlayContent(content)} 
+                      onRemix={() => handleRemix(content)}
+                      onEditTitle={(newTitle) => handleEditTitle(content.id, newTitle)}
+                      currentUserId={user?.id}
+                    />
                   ))}
                 </div>
               </div>
@@ -597,6 +1175,24 @@ function App() {
               />
           )}
 
+          {currentView === 'feedback' && feedbackState && (
+            <FeedbackPage
+              type={feedbackState.type}
+              title={feedbackState.title}
+              message={feedbackState.message}
+              details={feedbackState.details}
+              actionLabel={feedbackState.actionLabel}
+              onAction={feedbackState.onAction}
+              secondaryActionLabel={feedbackState.secondaryActionLabel}
+              onSecondaryAction={feedbackState.onSecondaryAction}
+              showHomeButton={true}
+              onHome={() => {
+                setFeedbackState(null);
+                setCurrentView(user?.role === 'teacher' ? 'teacher_dash' : user?.role === 'admin' ? 'admin_dashboard' : 'dashboard');
+              }}
+            />
+          )}
+
           {currentView === 'create' && (
             <CreatorStudio 
                 onContentCreated={handleContentCreated} 
@@ -604,6 +1200,36 @@ function App() {
                 userRole={user?.role || 'parent'} 
                 initialSource={remixItem}
                 onCancelRemix={() => { setRemixItem(null); setCurrentView(user?.role === 'teacher' ? 'teacher_dash' : 'library'); }}
+                children={user?.children || []}
+                onNavigateToSubscription={() => setCurrentView('subscription')}
+                onNavigateToFamily={() => setCurrentView('family')}
+                hasCreatedContent={user ? (() => {
+                  // Verificar conteúdo criado pelo usuário
+                  // Pode ser que authorId seja string ou número, então vamos comparar ambos
+                  const userContent = contentList.filter(c => {
+                    const authorIdMatch = String(c.authorId) === String(user.id) || c.authorId === user.id;
+                    const roleMatch = c.authorRole === user.role;
+                    return authorIdMatch && roleMatch;
+                  });
+                  
+                  // Também verificar no backend se houver token
+                  const token = localStorage.getItem('token');
+                  if (token && userContent.length === 0) {
+                    // Se não encontrou no contentList local, pode estar apenas no backend
+                    // Por enquanto, vamos confiar no contentList
+                    console.log('Conteúdo não encontrado localmente, mas pode existir no backend');
+                  }
+                  
+                  console.log('Verificando conteúdo criado:', {
+                    userId: user.id,
+                    userRole: user.role,
+                    contentCount: userContent.length,
+                    contentIds: userContent.map(c => c.id),
+                    allContentIds: contentList.map(c => ({ id: c.id, authorId: c.authorId, authorRole: c.authorRole }))
+                  });
+                  
+                  return userContent.length > 0;
+                })() : false}
             />
           )}
 
@@ -632,6 +1258,46 @@ function App() {
                     </div>
                 )}
                 <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Origem</p>
+                    <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                        {['Todas', 'Plataforma', 'Meus'].map(origin => (
+                            <button 
+                                key={origin} 
+                                onClick={() => setFilterOrigin(origin)} 
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition whitespace-nowrap ${
+                                    filterOrigin === origin 
+                                        ? 'bg-indigo-600 text-white shadow-md' 
+                                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                }`}
+                            >
+                                {origin}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Tipo de Conteúdo</p>
+                    <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                        {['Todas', 'story', 'quiz', 'summary', 'game'].map(type => (
+                            <button 
+                                key={type} 
+                                onClick={() => setFilterContentType(type)} 
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition whitespace-nowrap ${
+                                    filterContentType === type 
+                                        ? 'bg-indigo-600 text-white shadow-md' 
+                                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                }`}
+                            >
+                                {type === 'Todas' ? 'Todas' : 
+                                 type === 'story' ? 'História' :
+                                 type === 'quiz' ? 'Quiz' :
+                                 type === 'summary' ? 'Resumo' :
+                                 type === 'game' ? 'Jogo' : type}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Matéria</p>
                     <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
                         {uniqueSubjects.map(subject => (
@@ -645,7 +1311,14 @@ function App() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {getFilteredContent().length > 0 ? (
                     getFilteredContent().map(content => (
-                        <ContentCard key={content.id} content={content} onClick={() => handlePlayContent(content)} onRemix={() => handleRemix(content)} />
+                        <ContentCard 
+                          key={content.id} 
+                          content={content} 
+                          onClick={() => handlePlayContent(content)} 
+                          onRemix={() => handleRemix(content)}
+                          onEditTitle={(newTitle) => handleEditTitle(content.id, newTitle)}
+                          currentUserId={user?.id}
+                        />
                     ))
                 ) : (
                     <div className="col-span-full text-center py-12 bg-white rounded-3xl border border-dashed border-slate-200">
@@ -799,7 +1472,17 @@ const DashboardCard = ({ title, value, icon, color }: { title: string, value: nu
   </div>
 );
 
-const ContentCard: React.FC<{ content: ContentItem, onClick: () => void, showPrice?: boolean, onRemix?: () => void }> = ({ content, onClick, showPrice, onRemix }) => {
+const ContentCard: React.FC<{ 
+  content: ContentItem, 
+  onClick: () => void, 
+  showPrice?: boolean, 
+  onRemix?: () => void,
+  onEditTitle?: (newTitle: string) => void,
+  currentUserId?: string
+}> = ({ content, onClick, showPrice, onRemix, onEditTitle, currentUserId }) => {
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState(content.title);
+  const isMyContent = String(content.authorId) === String(currentUserId);
   const getIcon = () => {
     switch (content.type) {
       case 'story': return <BookOpen className="w-5 h-5 text-orange-500" />;
@@ -823,13 +1506,64 @@ const ContentCard: React.FC<{ content: ContentItem, onClick: () => void, showPri
       <div>
         <div className="flex justify-between items-start mb-4">
             <div className={`p-2 rounded-xl ${getColor()}`}>{getIcon()}</div>
-            {content.isAiGenerated && (
-            <span className="flex items-center gap-1 text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-full border border-purple-100"><Sparkles className="w-3 h-3" /> IA</span>
-            )}
+            <div className="flex items-center gap-1">
+              {String(content.authorId) === 'sys' && (
+                <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full border border-blue-100">🏛️ Plataforma</span>
+              )}
+              {isMyContent && (
+                <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full border border-green-100">✨ Meu</span>
+              )}
+              {content.isAiGenerated && (
+                <span className="flex items-center gap-1 text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-full border border-purple-100"><Sparkles className="w-3 h-3" /> IA</span>
+              )}
+            </div>
         </div>
         
         <div className="mb-2" onClick={onClick}>
-            <h3 className="text-lg font-bold text-slate-800 mb-1 leading-tight group-hover:text-indigo-600 transition">{content.title}</h3>
+            {isEditingTitle && isMyContent && onEditTitle ? (
+              <div className="flex items-center gap-2 mb-1" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  value={editedTitle}
+                  onChange={(e) => setEditedTitle(e.target.value)}
+                  onBlur={() => {
+                    if (editedTitle.trim() && editedTitle !== content.title) {
+                      onEditTitle(editedTitle.trim());
+                    }
+                    setIsEditingTitle(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (editedTitle.trim() && editedTitle !== content.title) {
+                        onEditTitle(editedTitle.trim());
+                      }
+                      setIsEditingTitle(false);
+                    } else if (e.key === 'Escape') {
+                      setEditedTitle(content.title);
+                      setIsEditingTitle(false);
+                    }
+                  }}
+                  className="flex-1 text-lg font-bold text-slate-800 leading-tight border-2 border-indigo-300 rounded-lg px-2 py-1 focus:outline-none focus:border-indigo-500"
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <div className="flex items-start gap-2">
+                <h3 className="flex-1 text-lg font-bold text-slate-800 mb-1 leading-tight group-hover:text-indigo-600 transition">{content.title}</h3>
+                {isMyContent && onEditTitle && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsEditingTitle(true);
+                    }}
+                    className="p-1 hover:bg-indigo-50 text-indigo-500 rounded transition opacity-0 group-hover:opacity-100"
+                    title="Editar título"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            )}
             <p className="text-slate-500 text-sm line-clamp-2 leading-relaxed">{content.description}</p>
         </div>
 

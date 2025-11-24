@@ -6,7 +6,7 @@ import {
   UserCheck, UserX, Award, Clock, Activity, PieChart,
   Mail, Send, Plus, X, CheckCircle, AlertCircle, Info,
   ArrowUp, ArrowDown, RefreshCw, MoreVertical, Shield,
-  UserPlus, FileText as FileTextIcon, TrendingDown
+  UserPlus, FileText as FileTextIcon, TrendingDown, Key
 } from 'lucide-react';
 
 // ========== INTERFACES ==========
@@ -44,7 +44,8 @@ interface User {
 interface ChildProfile {
   id: string;
   name: string;
-  age: number;
+  birthDate?: string; // Data de nascimento no formato ISO (YYYY-MM-DD)
+  age?: number; // Calculado a partir de birthDate, mantido para compatibilidade
   grade: string;
   points: number;
   school?: string;
@@ -147,6 +148,7 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
   const [contents, setContents] = useState<Content[]>([]);
   const [accesses, setAccesses] = useState<Access[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [rankings, setRankings] = useState<TeacherRanking[]>([]);
@@ -157,6 +159,10 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
   const [showUserModal, setShowUserModal] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [selectedUserForPasswordReset, setSelectedUserForPasswordReset] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [routes, setRoutes] = useState<any[]>([]);
   const [permissions, setPermissions] = useState<any[]>([]);
   
@@ -320,14 +326,26 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
       if (filters.type) params.append('type', filters.type);
       if (filters.status) params.append('status', filters.status);
       
-      const res = await fetch(`${API_BASE}/admin/financial/transactions?${params}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setTransactions(data.transactions || []);
+      const [transactionsRes, invoicesRes] = await Promise.all([
+        fetch(`${API_BASE}/admin/financial/transactions?${params}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${API_BASE}/admin/financial/invoices?${params}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+      
+      if (transactionsRes.ok) {
+        const transactionsData = await transactionsRes.json();
+        setTransactions(transactionsData.transactions || []);
+      }
+      
+      if (invoicesRes.ok) {
+        const invoicesData = await invoicesRes.json();
+        setInvoices(invoicesData.invoices || []);
+      }
     } catch (error) {
-      console.error('Error loading transactions:', error);
+      console.error('Error loading financial data:', error);
     } finally {
       setLoading(false);
     }
@@ -443,6 +461,53 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
     }
   };
 
+  const handleResetPassword = (user: User) => {
+    setSelectedUserForPasswordReset(user);
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowResetPasswordModal(true);
+  };
+
+  const confirmResetPassword = async () => {
+    if (!selectedUserForPasswordReset) return;
+
+    if (!newPassword || newPassword.length < 6) {
+      alert('A senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      alert('As senhas não coincidem');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${selectedUserForPasswordReset.id}/reset-password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ newPassword })
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        alert(error.error || 'Erro ao alterar senha');
+        return;
+      }
+
+      alert(`Senha alterada com sucesso para o usuário ${selectedUserForPasswordReset.name}`);
+      setShowResetPasswordModal(false);
+      setSelectedUserForPasswordReset(null);
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      console.error('Error resetting password:', error);
+      alert('Erro ao alterar senha. Tente novamente.');
+    }
+  };
+
   const handleDeleteUser = async (userId: string) => {
     if (!confirm('Tem certeza que deseja deletar este usuário?')) return;
     
@@ -460,6 +525,18 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
   };
 
   const handleDeleteContent = async (contentId: string) => {
+    // Proteger jogo de tabuada
+    const content = contents.find(c => c.id === contentId);
+    if (content) {
+      const isTabuadaGame = content.id === '5' || 
+        (content.type === 'game' && (content.data as any)?.gameType === 'multiplication-table') ||
+        (content.title?.toLowerCase().includes('tabuada'));
+      
+      if (isTabuadaGame) {
+        alert('O jogo de tabuada é fixo e não pode ser removido.');
+        return;
+      }
+    }
     if (!confirm('Tem certeza que deseja deletar este conteúdo?')) return;
     
     try {
@@ -676,6 +753,7 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
           onFiltersChange={setFilters}
           onViewUser={handleViewUser}
           onDeleteUser={handleDeleteUser}
+          onResetPassword={handleResetPassword}
         />
       );
     }
@@ -715,6 +793,7 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
       return (
         <FinancialManagement
           transactions={transactions}
+          invoices={invoices}
           filters={filters}
           onFiltersChange={setFilters}
         />
@@ -804,6 +883,84 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
           onClose={() => setShowNotificationModal(false)}
         />
       )}
+
+      {showResetPasswordModal && selectedUserForPasswordReset && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Resetar Senha</h2>
+              <button
+                onClick={() => {
+                  setShowResetPasswordModal(false);
+                  setSelectedUserForPasswordReset(null);
+                  setNewPassword('');
+                  setConfirmPassword('');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                Usuário: <span className="font-semibold">{selectedUserForPasswordReset.name}</span>
+              </p>
+              <p className="text-sm text-gray-600">
+                Email: <span className="font-semibold">{selectedUserForPasswordReset.email}</span>
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Nova Senha
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Mínimo 6 caracteres"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Confirmar Senha
+                </label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Digite a senha novamente"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowResetPasswordModal(false);
+                  setSelectedUserForPasswordReset(null);
+                  setNewPassword('');
+                  setConfirmPassword('');
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-semibold hover:bg-gray-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmResetPassword}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -835,7 +992,7 @@ const QuickActionButton = ({ icon, label, onClick, color }: any) => (
   </button>
 );
 
-const UsersManagement = ({ users, filters, onFiltersChange, onViewUser, onDeleteUser }: any) => (
+const UsersManagement = ({ users, filters, onFiltersChange, onViewUser, onDeleteUser, onResetPassword }: any) => (
   <div className="bg-white rounded-xl shadow-sm border border-gray-200">
     <div className="p-6 border-b border-gray-200">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -933,6 +1090,13 @@ const UsersManagement = ({ users, filters, onFiltersChange, onViewUser, onDelete
                       title="Ver detalhes"
                     >
                       <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => onResetPassword(user)}
+                      className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition"
+                      title="Resetar senha"
+                    >
+                      <Key className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => onDeleteUser(user.id)}
@@ -1110,8 +1274,111 @@ const NotificationsManagement = ({ notifications, onCreateNotification }: any) =
   </div>
 );
 
-const FinancialManagement = ({ transactions, filters, onFiltersChange }: any) => (
+const FinancialManagement = ({ transactions, invoices, filters, onFiltersChange }: any) => (
   <div className="space-y-6">
+    {/* Invoices Section */}
+    <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+        <h2 className="text-xl font-bold text-gray-900">Faturas de Assinaturas</h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={filters.status || ''}
+            onChange={(e) => onFiltersChange({ ...filters, status: e.target.value })}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm"
+          >
+            <option value="">Todos os status</option>
+            <option value="paid">Pago</option>
+            <option value="pending">Pendente</option>
+            <option value="overdue">Vencido</option>
+            <option value="cancelled">Cancelado</option>
+          </select>
+          <input
+            type="date"
+            value={filters.startDate || ''}
+            onChange={(e) => onFiltersChange({ ...filters, startDate: e.target.value })}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm"
+          />
+          <input
+            type="date"
+            value={filters.endDate || ''}
+            onChange={(e) => onFiltersChange({ ...filters, endDate: e.target.value })}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm"
+          />
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Data</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Usuário</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Tipo</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Valor</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Forma de Pagamento</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Vencimento</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Pagamento</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {invoices.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
+                  Nenhuma fatura encontrada
+                </td>
+              </tr>
+            ) : (
+              invoices.map((invoice: any) => (
+                <tr key={invoice.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {new Date(invoice.createdAt).toLocaleDateString('pt-BR')}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">
+                    {invoice.user?.name || 'N/A'}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
+                      {invoice.type === 'subscription' ? 'Assinatura' : invoice.type}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 font-semibold text-green-600">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(invoice.amount))}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {invoice.paymentMethod === 'credit_card' ? 'Cartão de Crédito' :
+                     invoice.paymentMethod === 'debit_card' ? 'Cartão de Débito' :
+                     invoice.paymentMethod === 'pix' ? 'PIX' :
+                     invoice.paymentMethod === 'boleto' ? 'Boleto' :
+                     invoice.paymentMethod || 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {new Date(invoice.dueDate).toLocaleDateString('pt-BR')}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {invoice.paidAt ? new Date(invoice.paidAt).toLocaleDateString('pt-BR') : '-'}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                      invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
+                      invoice.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      invoice.status === 'overdue' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {invoice.status === 'paid' ? 'Pago' :
+                       invoice.status === 'pending' ? 'Pendente' :
+                       invoice.status === 'overdue' ? 'Vencido' :
+                       invoice.status === 'cancelled' ? 'Cancelado' : invoice.status}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {/* Transactions Section */}
     <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <h2 className="text-xl font-bold text-gray-900">Transações Financeiras</h2>
@@ -1593,14 +1860,30 @@ const UserDetailModal = ({ user, details, onClose, onViewContent }: any) => {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Alunos Vinculados</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {user.children.map((child: ChildProfile) => (
-                    <div key={child.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <p className="font-semibold text-gray-900">{child.name}</p>
-                      <p className="text-sm text-gray-600">{child.age} anos - {child.grade}</p>
-                      {child.school && <p className="text-sm text-gray-600">Escola: {child.school}</p>}
-                      <p className="text-sm text-gray-600 mt-2">Pontos: {child.points}</p>
-                    </div>
-                  ))}
+                  {user.children.map((child: ChildProfile) => {
+                    // Calcula idade a partir da data de nascimento se disponível
+                    const calculateAge = (birthDate?: string): number | undefined => {
+                      if (!birthDate) return child.age;
+                      const birth = new Date(birthDate);
+                      const today = new Date();
+                      let age = today.getFullYear() - birth.getFullYear();
+                      const monthDiff = today.getMonth() - birth.getMonth();
+                      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+                        age--;
+                      }
+                      return age;
+                    };
+                    const age = child.birthDate ? calculateAge(child.birthDate) : child.age;
+                    
+                    return (
+                      <div key={child.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="font-semibold text-gray-900">{child.name}</p>
+                        <p className="text-sm text-gray-600">{age || 'N/A'} anos - {child.grade}</p>
+                        {child.school && <p className="text-sm text-gray-600">Escola: {child.school}</p>}
+                        <p className="text-sm text-gray-600 mt-2">Pontos: {child.points}</p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -10,11 +10,17 @@ export class ChildProfile {
   @Column()
   name: string;
 
-  @Column({ type: 'int' })
-  age: number;
+  @Column({ type: 'date', nullable: true })
+  birthDate?: Date;
+
+  @Column({ type: 'int', nullable: true })
+  age: number; // Mantido para compatibilidade, será calculado a partir de birthDate
 
   @Column()
   grade: string;
+
+  @Column({ nullable: true })
+  educationLevel?: 'pre-escola' | 'fundamental1' | 'fundamental2' | 'ensino-medio'; // Categorização automática baseada na série
 
   @Column({ nullable: true })
   school?: string;

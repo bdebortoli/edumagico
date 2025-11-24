@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { User } from './User';
 
-export type ContentType = 'story' | 'quiz' | 'summary';
+export type ContentType = 'story' | 'quiz' | 'summary' | 'game';
 
 @Entity('content_items')
 export class ContentItem {
@@ -14,7 +14,7 @@ export class ContentItem {
   @Column({ type: 'text' })
   description: string;
 
-  @Column({ type: 'enum', enum: ['story', 'quiz', 'summary'] })
+  @Column({ type: 'enum', enum: ['story', 'quiz', 'summary', 'game'] })
   type: ContentType;
 
   @Column({ name: 'author_id' })

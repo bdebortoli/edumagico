@@ -8,7 +8,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 interface SubscriptionPageProps {
   currentUser: User;
-  onUpgrade: (plan: PlanType, cycle: SubscriptionCycle) => void;
+  onUpgrade: (plan: PlanType, cycle: SubscriptionCycle) => Promise<void>;
 }
 
 const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ currentUser, onUpgrade }) => {
@@ -27,6 +27,10 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ currentUser, onUpgr
     const token = localStorage.getItem('token') || '';
     
     try {
+      // Extrair últimos 4 dígitos do cartão
+      const last4 = cardData.number.replace(/\s/g, '').slice(-4);
+      const cardType = cardData.number.replace(/\s/g, '').startsWith('4') ? 'credit_card' : 'debit_card';
+      
       const res = await fetch(`${API_BASE}/users/subscription`, {
         method: 'PUT',
         headers: {
@@ -35,7 +39,11 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ currentUser, onUpgr
         },
         body: JSON.stringify({
           plan: 'premium',
-          cycle: cycle
+          cycle: cycle,
+          paymentMethod: {
+            type: cardType,
+            last4: last4
+          }
         })
       });
 
@@ -47,8 +55,14 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ currentUser, onUpgr
       }
 
       const data = await res.json();
-      onUpgrade('premium', cycle);
-      alert('Assinatura atualizada com sucesso! Bem-vindo ao Premium.');
+      
+      // Atualiza o usuário com a resposta do backend
+      if (data.user) {
+        await onUpgrade('premium', cycle);
+        alert('Assinatura atualizada com sucesso! Bem-vindo ao Premium.');
+      } else {
+        alert('Assinatura atualizada com sucesso! Bem-vindo ao Premium.');
+      }
     } catch (error) {
       console.error('Error updating subscription:', error);
       alert('Erro ao atualizar assinatura. Tente novamente.');

@@ -73,8 +73,8 @@ router.post('/login', async (req: Request, res: Response) => {
 
     const userRepository = AppDataSource.getRepository(User);
     const user = await userRepository.findOne({ 
-      where: { email }
-      // Removido relations para evitar erro se as tabelas não existirem
+      where: { email },
+      relations: ['children'] // Carrega os filhos do usuário
     });
 
     if (!user) {

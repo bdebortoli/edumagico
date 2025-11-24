@@ -20,21 +20,134 @@ router.get('/children', async (req: AuthRequest, res: Response) => {
       order: { createdAt: 'DESC' }
     });
 
-    res.json({ children });
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth(); // 0-11 (Janeiro = 0)
+    // Considera que o ano letivo começa em fevereiro (mês 1)
+    const schoolYearStartMonth = 1; // Fevereiro
+
+    // Garante que a idade está calculada, educationLevel está definido e formata birthDate para ISO string
+    const childrenWithAge = await Promise.all(children.map(async (child) => {
+      // Se educationLevel não estiver definido, calcula baseado na série
+      if (!child.educationLevel && child.grade) {
+        child.educationLevel = getEducationLevel(child.grade);
+        await childRepository.save(child);
+      }
+
+      // Atualização automática de série ao mudar de ano
+      // Verifica se passou um ano desde a última atualização (baseado em updatedAt)
+      if (child.birthDate && child.updatedAt) {
+        const lastUpdate = new Date(child.updatedAt);
+        const monthsSinceUpdate = (currentYear - lastUpdate.getFullYear()) * 12 + (currentMonth - lastUpdate.getMonth());
+        
+        // Se passou mais de 10 meses desde a última atualização, atualiza incrementalmente
+        // Isso garante que a série seja atualizada uma vez por ano, de forma incremental
+        if (monthsSinceUpdate >= 10) {
+          const nextGrade = getNextGrade(child.grade);
+          // Só atualiza se não for a última série possível
+          if (nextGrade !== child.grade) {
+            child.grade = nextGrade;
+            child.educationLevel = getEducationLevel(nextGrade);
+            await childRepository.save(child);
+          }
+        }
+      }
+      
+      return {
+        ...child,
+        birthDate: child.birthDate ? child.birthDate.toISOString().split('T')[0] : null,
+        age: child.birthDate ? calculateAge(child.birthDate) : child.age
+      };
+    }));
+
+    res.json({ children: childrenWithAge });
   } catch (error) {
     console.error('Get children error:', error);
     res.status(500).json({ error: 'Erro ao buscar filhos' });
   }
 });
 
+// Helper function to calculate age from birth date
+function calculateAge(birthDate: Date | string): number {
+  const birth = typeof birthDate === 'string' ? new Date(birthDate) : birthDate;
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+}
+
+// Helper function to get next grade incrementally
+function getNextGrade(currentGrade: string): string {
+  const gradeMap: { [key: string]: string } = {
+    'Pré-escola': '1º Ano Fund.',
+    '1º Ano Fund.': '2º Ano Fund.',
+    '2º Ano Fund.': '3º Ano Fund.',
+    '3º Ano Fund.': '4º Ano Fund.',
+    '4º Ano Fund.': '5º Ano Fund.',
+    '5º Ano Fund.': '6º Ano Fund.',
+    '6º Ano Fund.': '7º Ano Fund.',
+    '7º Ano Fund.': '8º Ano Fund.',
+    '8º Ano Fund.': '9º Ano Fund.',
+    '9º Ano Fund.': '1º Ano Médio',
+    '1º Ano Médio': '2º Ano Médio',
+    '2º Ano Médio': '3º Ano Médio',
+    '3º Ano Médio': '3º Ano Médio' // Mantém no último ano
+  };
+  
+  return gradeMap[currentGrade] || currentGrade;
+}
+
+// Helper function to categorize education level based on grade
+function getEducationLevel(grade: string): 'pre-escola' | 'fundamental1' | 'fundamental2' | 'ensino-medio' | undefined {
+  if (!grade) return undefined;
+  
+  const gradeLower = grade.toLowerCase();
+  
+  // Pré-escola
+  if (gradeLower.includes('pré-escola') || gradeLower.includes('pre-escola')) {
+    return 'pre-escola';
+  }
+  
+  // Fundamental 1 (1º a 5º Ano Fund.)
+  if (gradeLower.includes('1º ano fund') || 
+      gradeLower.includes('2º ano fund') || 
+      gradeLower.includes('3º ano fund') || 
+      gradeLower.includes('4º ano fund') || 
+      gradeLower.includes('5º ano fund')) {
+    return 'fundamental1';
+  }
+  
+  // Fundamental 2 (6º a 9º Ano Fund.)
+  if (gradeLower.includes('6º ano fund') || 
+      gradeLower.includes('7º ano fund') || 
+      gradeLower.includes('8º ano fund') || 
+      gradeLower.includes('9º ano fund')) {
+    return 'fundamental2';
+  }
+  
+  // Ensino Médio (1º a 3º Ano Médio)
+  if (gradeLower.includes('1º ano médio') || 
+      gradeLower.includes('2º ano médio') || 
+      gradeLower.includes('3º ano médio')) {
+    return 'ensino-medio';
+  }
+  
+  return undefined;
+}
+
 // Create child
 router.post('/children', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, age, grade, school, state, city, avatar } = req.body;
+    const { name, birthDate, age, grade, school, state, city, avatar } = req.body;
 
-    if (!name || !age || !grade) {
-      return res.status(400).json({ error: 'Nome, idade e série são obrigatórios' });
+    if (!name || !birthDate || !grade) {
+      return res.status(400).json({ error: 'Nome, data de nascimento e série são obrigatórios' });
     }
+
+    // Calcula a idade a partir da data de nascimento
+    const calculatedAge = calculateAge(birthDate);
 
     // Check plan limits
     const user = await AppDataSource.getRepository(User).findOne({
@@ -59,8 +172,10 @@ router.post('/children', async (req: AuthRequest, res: Response) => {
     const childRepository = AppDataSource.getRepository(ChildProfile);
     const child = childRepository.create({
       name,
-      age,
+      birthDate: new Date(birthDate),
+      age: calculatedAge, // Calculado para compatibilidade
       grade,
+      educationLevel: getEducationLevel(grade), // Categorização automática baseada na série
       school,
       state,
       city,
@@ -81,7 +196,7 @@ router.post('/children', async (req: AuthRequest, res: Response) => {
 // Update child
 router.put('/children/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, age, grade, school, state, city, avatar } = req.body;
+    const { name, birthDate, grade, school, state, city, avatar } = req.body;
 
     const childRepository = AppDataSource.getRepository(ChildProfile);
     const child = await childRepository.findOne({
@@ -93,8 +208,14 @@ router.put('/children/:id', async (req: AuthRequest, res: Response) => {
     }
 
     if (name) child.name = name;
-    if (age) child.age = age;
-    if (grade) child.grade = grade;
+    if (birthDate) {
+      child.birthDate = new Date(birthDate);
+      child.age = calculateAge(birthDate); // Recalcula a idade
+    }
+    if (grade) {
+      child.grade = grade;
+      child.educationLevel = getEducationLevel(grade); // Recalcula a categorização quando a série muda
+    }
     if (school !== undefined) child.school = school;
     if (state !== undefined) child.state = state;
     if (city !== undefined) child.city = city;
