@@ -18,9 +18,9 @@ Em produção, ocorria erro 500 ao tentar gerar conteúdo com múltiplos arquivo
 ### 1. Validações no Frontend (`components/CreatorStudio.tsx`)
 
 #### Limites Adicionados:
-- **Máximo de arquivos**: 10 arquivos por requisição
+- **Máximo de arquivos**: 20 arquivos por requisição
 - **Tamanho máximo por arquivo**: 20MB
-- **Tamanho total máximo**: 50MB (considerando conversão para base64)
+- **Tamanho total máximo**: 100MB (considerando conversão para base64)
 
 #### Validações Implementadas:
 - ✅ Verificação de quantidade de arquivos antes do upload
@@ -32,9 +32,9 @@ Em produção, ocorria erro 500 ao tentar gerar conteúdo com múltiplos arquivo
 
 #### Código Adicionado:
 ```typescript
-const MAX_FILES = 10; // Limite de arquivos
+const MAX_FILES = 20; // Limite de arquivos
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB por arquivo
-const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB total
+const MAX_TOTAL_SIZE = 100 * 1024 * 1024; // 100MB total
 
 // Validações antes de processar arquivos
 if (files.length + filesArray.length > MAX_FILES) {
@@ -51,18 +51,18 @@ if (file.size > MAX_FILE_SIZE) {
 ### 2. Validações no Backend (`server/src/routes/content.routes.ts`)
 
 #### Validações Adicionadas:
-- ✅ Limite de quantidade de arquivos (10 arquivos)
+- ✅ Limite de quantidade de arquivos (20 arquivos)
 - ✅ Validação de tamanho individual (30MB em base64 ≈ 20MB original)
-- ✅ Validação de tamanho total (60MB em base64 ≈ 45MB original)
+- ✅ Validação de tamanho total (120MB em base64 ≈ 90MB original)
 - ✅ Validação de tipos MIME suportados
 - ✅ Verificação de integridade dos dados base64
 - ✅ Logs detalhados para debug
 
 #### Código Adicionado:
 ```typescript
-const MAX_FILES = 10;
+const MAX_FILES = 20;
 const MAX_FILE_SIZE_BASE64 = 30 * 1024 * 1024; // ~30MB em base64
-const MAX_TOTAL_SIZE_BASE64 = 60 * 1024 * 1024; // ~60MB total
+const MAX_TOTAL_SIZE_BASE64 = 120 * 1024 * 1024; // ~120MB total
 
 // Validações antes de processar
 if (files.length > MAX_FILES) {
@@ -137,9 +137,9 @@ for (const file of files) {
 ## 🔧 Configurações e Limites
 
 ### Limites Atuais:
-- **Máximo de arquivos**: 10 por requisição
+- **Máximo de arquivos**: 20 por requisição
 - **Tamanho máximo por arquivo**: 20MB (frontend) / 30MB base64 (backend)
-- **Tamanho total máximo**: 50MB (frontend) / 60MB base64 (backend)
+- **Tamanho total máximo**: 100MB (frontend) / 120MB base64 (backend)
 
 ### Tipos de Arquivo Suportados:
 - ✅ Imagens: JPG, JPEG, PNG, GIF, WEBP

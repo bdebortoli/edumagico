@@ -449,9 +449,9 @@ const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPla
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (selectedFiles) {
-      const MAX_FILES = 10; // Limite de arquivos
+      const MAX_FILES = 20; // Limite de arquivos
       const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB por arquivo
-      const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB total
+      const MAX_TOTAL_SIZE = 100 * 1024 * 1024; // 100MB total (aumentado para acomodar mais arquivos)
       
       const filesArray: File[] = Array.from(selectedFiles);
       
