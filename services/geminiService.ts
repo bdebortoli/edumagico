@@ -9,6 +9,19 @@ const getAuthToken = (): string | null => {
 };
 
 
+export interface SizeParams {
+  questions?: number;
+  pages?: number;
+  level?: 'curto' | 'medio' | 'completo';
+}
+
+export interface GenerationResponse {
+  generated?: any;
+  needsConfirmation?: boolean;
+  confirmationMessage?: string;
+  contentType?: ContentType;
+}
+
 export const generateEducationalContent = async (
   promptInput: string,
   age: number,
@@ -16,8 +29,9 @@ export const generateEducationalContent = async (
   files: FileAttachment[] = [],
   sourceContext?: string,
   grade?: string,
-  refinementRequest?: string
-): Promise<any> => {
+  refinementRequest?: string,
+  sizeParams?: SizeParams
+): Promise<GenerationResponse> => {
   try {
     const token = getAuthToken();
     if (!token) {
@@ -53,6 +67,18 @@ export const generateEducationalContent = async (
       requestBody.sourceContext = sourceContext;
     }
 
+    if (grade) {
+      requestBody.grade = grade;
+    }
+
+    if (refinementRequest) {
+      requestBody.refinementPrompt = refinementRequest;
+    }
+
+    if (sizeParams) {
+      requestBody.sizeParams = sizeParams;
+    }
+
     const response = await fetch(`${API_BASE}/content/generate`, {
       method: 'POST',
       headers: {
@@ -63,12 +89,44 @@ export const generateEducationalContent = async (
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
-      throw new Error(errorData.error || `Erro ao gerar conteúdo: ${response.statusText}`);
+      let errorMessage = 'Erro desconhecido';
+      
+      // Tratamento específico para diferentes códigos de erro
+      if (response.status === 413) {
+        errorMessage = 'Arquivos muito grandes. Tente enviar menos imagens ou imagens menores.';
+      } else if (response.status === 500) {
+        errorMessage = 'Erro no servidor ao gerar conteúdo. Verifique se a chave do Gemini está configurada.';
+      } else if (response.status === 401) {
+        errorMessage = 'Sessão expirada. Faça login novamente.';
+      } else if (response.status === 403) {
+        errorMessage = 'Você não tem permissão para gerar conteúdo. Faça upgrade para Premium ou use conta de Professor.';
+      }
+      
+      // Tenta obter mensagem de erro do servidor
+      try {
+        const errorData = await response.json();
+        if (errorData.error) {
+          errorMessage = errorData.error;
+        }
+      } catch (e) {
+        // Se não conseguir ler JSON, usa mensagem padrão baseada no status
+      }
+      
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
-    return data.generated;
+    
+    // Verificar se precisa de confirmação
+    if (data.needsConfirmation) {
+      return {
+        needsConfirmation: true,
+        confirmationMessage: data.confirmationMessage,
+        contentType: data.contentType
+      };
+    }
+    
+    return { generated: data.generated };
   } catch (error: any) {
     console.error("Erro ao gerar conteúdo:", error);
     throw new Error(error.message || "Erro ao gerar conteúdo. Verifique sua conexão e tente novamente.");

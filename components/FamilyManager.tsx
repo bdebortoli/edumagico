@@ -24,6 +24,22 @@ const AVATAR_STYLES = [
   { id: 'thumbs', name: 'Monstrinho', icon: <Ghost className="w-4 h-4"/> }, 
 ];
 
+// Helper function to get education level display name
+const getEducationLevelName = (level?: string): string => {
+  switch (level) {
+    case 'pre-escola':
+      return 'Pré-escola';
+    case 'fundamental1':
+      return 'Fundamental 1';
+    case 'fundamental2':
+      return 'Fundamental 2';
+    case 'ensino-medio':
+      return 'Ensino Médio';
+    default:
+      return '';
+  }
+};
+
 interface IBGEState {
   id: number;
   sigla: string;
@@ -179,7 +195,12 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
     e.preventDefault();
     if (!formData.name) return;
 
-    const token = localStorage.getItem('token') || '';
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('Erro: Você precisa estar autenticado. Por favor, faça login novamente.');
+      return;
+    }
+
     const avatarUrl = `https://api.dicebear.com/7.x/${formData.avatarStyle}/svg?seed=${formData.avatarSeed}`;
 
     try {
@@ -204,6 +225,15 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
 
         if (!res.ok) {
           const error = await res.json();
+          // Se o erro for de token inválido, tenta recarregar o usuário
+          if (res.status === 401 && error.error?.includes('Token')) {
+            // Remove token inválido e recarrega a página para fazer login novamente
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            alert('Sua sessão expirou. Por favor, faça login novamente.');
+            window.location.reload();
+            return;
+          }
           alert(error.error || 'Erro ao atualizar perfil');
           return;
         }
@@ -216,6 +246,11 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
         onUpdateChildren(updatedChildren);
       } else {
         // Create new
+        if (!token) {
+          alert('Erro: Você precisa estar autenticado. Por favor, faça login novamente.');
+          return;
+        }
+        
         const res = await fetch(`${API_BASE}/family/children`, {
           method: 'POST',
           headers: {
@@ -235,6 +270,15 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
 
         if (!res.ok) {
           const error = await res.json();
+          // Se o erro for de token inválido, tenta recarregar o usuário
+          if (res.status === 401 && error.error?.includes('Token')) {
+            // Remove token inválido e recarrega a página para fazer login novamente
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            alert('Sua sessão expirou. Por favor, faça login novamente.');
+            window.location.reload();
+            return;
+          }
           alert(error.error || 'Erro ao criar perfil');
           return;
         }
@@ -281,11 +325,20 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
         }
       });
 
-      if (!res.ok) {
-        const error = await res.json();
-        alert(error.error || 'Erro ao remover perfil');
-        return;
-      }
+        if (!res.ok) {
+          const error = await res.json();
+          // Se o erro for de token inválido, tenta recarregar o usuário
+          if (res.status === 401 && error.error?.includes('Token')) {
+            // Remove token inválido e recarrega a página para fazer login novamente
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            alert('Sua sessão expirou. Por favor, faça login novamente.');
+            window.location.reload();
+            return;
+          }
+          alert(error.error || 'Erro ao remover perfil');
+          return;
+        }
 
       // Remove da lista local
       onUpdateChildren((user.children || []).filter(c => c.id !== id));
@@ -323,6 +376,11 @@ const FamilyManager: React.FC<FamilyManagerProps> = ({ user, onUpdateChildren, o
               <h3 className="text-xl font-bold text-slate-800">{child.name}</h3>
               <p className="text-slate-500 text-sm mb-1">
                 {child.birthDate ? calculateAge(child.birthDate) : child.age || 'N/A'} anos • {child.grade}
+                {child.educationLevel && (
+                  <span className="ml-2 text-indigo-600 font-bold">
+                    • {getEducationLevelName(child.educationLevel)}
+                  </span>
+                )}
               </p>
               {child.school && (
                  <p className="text-slate-400 text-xs flex items-center gap-1 truncate max-w-[150px]">

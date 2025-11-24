@@ -12,7 +12,9 @@
     "migration:run": "typeorm migration:run -d src/config/database.ts",
     "migration:revert": "typeorm migration:revert -d src/config/database.ts",
     "populate:routes": "ts-node src/scripts/populateRoutes.ts",
-    "populate:routes:prod": "node -r ts-node/register dist/scripts/populateRoutes.js"
+    "populate:routes:prod": "node -r ts-node/register dist/scripts/populateRoutes.js",
+    "restore:tabuada": "ts-node src/scripts/restoreTabuadaGame.ts",
+    "update:education-levels": "ts-node src/scripts/updateEducationLevels.ts"
   },
   "keywords": [],
   "author": "",

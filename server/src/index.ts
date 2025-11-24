@@ -17,6 +17,7 @@ import marketplaceRoutes from './routes/marketplace.routes';
 import familyRoutes from './routes/family.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import adminRoutes from './routes/admin.routes';
+import correcaoRoutes from './routes/correcao.routes';
 
 // dotenv já foi carregado no topo do arquivo
 
@@ -71,8 +72,9 @@ const corsOptions: CorsOptions = {
   maxAge: 86400 // 24 horas
 };
 app.use(cors(corsOptions));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Aumentar limite de payload para suportar imagens em base64 (50MB)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Health check (antes de qualquer inicialização do banco)
 app.get('/health', (req, res) => {
@@ -87,6 +89,89 @@ app.get('/health', (req, res) => {
       status: 'error', 
       error: error.message,
       timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Endpoint temporário para restaurar jogo de tabuada
+app.post('/api/setup/restore-tabuada', async (req, res) => {
+  try {
+    if (!AppDataSource.isInitialized) {
+      await AppDataSource.initialize();
+    }
+
+    const { ContentItem } = await import('./entities/ContentItem');
+    const contentRepository = AppDataSource.getRepository(ContentItem);
+
+    // Verifica se já existe
+    const existing = await contentRepository
+      .createQueryBuilder('content')
+      .where('content.title = :title', { title: 'Jogo da Tabuada Interativo' })
+      .orWhere("content.data->>'gameType' = :gameType", { gameType: 'multiplication-table' })
+      .getOne();
+
+    if (existing) {
+      const isTabuada = (existing.type === 'game' && (existing.data as any)?.gameType === 'multiplication-table') ||
+        existing.title?.toLowerCase().includes('tabuada');
+
+      if (isTabuada) {
+        return res.json({ 
+          success: true, 
+          message: 'Jogo de tabuada já existe',
+          content: existing 
+        });
+      }
+    }
+
+    // Busca ou cria usuário sistema
+    const { User } = await import('./entities/User');
+    const userRepository = AppDataSource.getRepository(User);
+    let systemUser = await userRepository.findOne({ where: { email: 'sistema@edumagico.com' } });
+    
+    if (!systemUser) {
+      systemUser = userRepository.create({
+        name: 'EduMágico Sistema',
+        email: 'sistema@edumagico.com',
+        password: 'system', // Senha não será usada
+        role: 'teacher',
+        plan: 'premium'
+      });
+      await userRepository.save(systemUser);
+    }
+
+    // Cria o jogo
+    const tabuadaGame = contentRepository.create({
+      title: 'Jogo da Tabuada Interativo',
+      description: 'Descubra todas as multiplicações da tabuada clicando nas casas! Aprenda de forma divertida e interativa.',
+      type: 'game',
+      authorId: systemUser.id,
+      authorName: 'EduMágico',
+      authorRole: 'teacher',
+      subject: 'Matemática',
+      ageRange: { min: 7, max: 10 },
+      grade: '2º Ano Fund.',
+      keywords: ['tabuada', 'multiplicação', 'matemática', 'jogo'],
+      isAiGenerated: false,
+      price: 0,
+      salesCount: 0,
+      data: {
+        gameType: 'multiplication-table',
+        config: {}
+      }
+    });
+
+    await contentRepository.save(tabuadaGame);
+
+    res.json({ 
+      success: true, 
+      message: 'Jogo de tabuada restaurado com sucesso',
+      content: tabuadaGame 
+    });
+  } catch (error: any) {
+    console.error('Erro ao restaurar jogo de tabuada:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
     });
   }
 });
@@ -208,14 +293,15 @@ app.get('/api', (req, res) => {
   res.json({
     message: 'EduMágico API',
     version: '1.0.0',
-    endpoints: {
+      endpoints: {
       auth: '/api/auth',
       users: '/api/users',
       content: '/api/content',
       marketplace: '/api/marketplace',
       family: '/api/family',
       analytics: '/api/analytics',
-      admin: '/api/admin'
+      admin: '/api/admin',
+      correcao: '/api/correcao'
     },
     health: '/health'
   });
@@ -229,6 +315,7 @@ app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/family', familyRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/correcao', correcaoRoutes);
 
 // Função para preencher campos NULL com valores padrão
 async function fillNullFields(client: Client, tableName: string, columnName: string, defaultValue: string) {

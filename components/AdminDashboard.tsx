@@ -6,7 +6,7 @@ import {
   UserCheck, UserX, Award, Clock, Activity, PieChart,
   Mail, Send, Plus, X, CheckCircle, AlertCircle, Info,
   ArrowUp, ArrowDown, RefreshCw, MoreVertical, Shield,
-  UserPlus, FileText as FileTextIcon, TrendingDown
+  UserPlus, FileText as FileTextIcon, TrendingDown, Key
 } from 'lucide-react';
 
 // ========== INTERFACES ==========
@@ -159,6 +159,10 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
   const [showUserModal, setShowUserModal] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [selectedUserForPasswordReset, setSelectedUserForPasswordReset] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [routes, setRoutes] = useState<any[]>([]);
   const [permissions, setPermissions] = useState<any[]>([]);
   
@@ -457,6 +461,53 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
     }
   };
 
+  const handleResetPassword = (user: User) => {
+    setSelectedUserForPasswordReset(user);
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowResetPasswordModal(true);
+  };
+
+  const confirmResetPassword = async () => {
+    if (!selectedUserForPasswordReset) return;
+
+    if (!newPassword || newPassword.length < 6) {
+      alert('A senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      alert('As senhas não coincidem');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${selectedUserForPasswordReset.id}/reset-password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ newPassword })
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        alert(error.error || 'Erro ao alterar senha');
+        return;
+      }
+
+      alert(`Senha alterada com sucesso para o usuário ${selectedUserForPasswordReset.name}`);
+      setShowResetPasswordModal(false);
+      setSelectedUserForPasswordReset(null);
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      console.error('Error resetting password:', error);
+      alert('Erro ao alterar senha. Tente novamente.');
+    }
+  };
+
   const handleDeleteUser = async (userId: string) => {
     if (!confirm('Tem certeza que deseja deletar este usuário?')) return;
     
@@ -474,6 +525,18 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
   };
 
   const handleDeleteContent = async (contentId: string) => {
+    // Proteger jogo de tabuada
+    const content = contents.find(c => c.id === contentId);
+    if (content) {
+      const isTabuadaGame = content.id === '5' || 
+        (content.type === 'game' && (content.data as any)?.gameType === 'multiplication-table') ||
+        (content.title?.toLowerCase().includes('tabuada'));
+      
+      if (isTabuadaGame) {
+        alert('O jogo de tabuada é fixo e não pode ser removido.');
+        return;
+      }
+    }
     if (!confirm('Tem certeza que deseja deletar este conteúdo?')) return;
     
     try {
@@ -690,6 +753,7 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
           onFiltersChange={setFilters}
           onViewUser={handleViewUser}
           onDeleteUser={handleDeleteUser}
+          onResetPassword={handleResetPassword}
         />
       );
     }
@@ -819,6 +883,84 @@ export default function AdminDashboard({ currentView, onViewChange }: AdminDashb
           onClose={() => setShowNotificationModal(false)}
         />
       )}
+
+      {showResetPasswordModal && selectedUserForPasswordReset && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Resetar Senha</h2>
+              <button
+                onClick={() => {
+                  setShowResetPasswordModal(false);
+                  setSelectedUserForPasswordReset(null);
+                  setNewPassword('');
+                  setConfirmPassword('');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                Usuário: <span className="font-semibold">{selectedUserForPasswordReset.name}</span>
+              </p>
+              <p className="text-sm text-gray-600">
+                Email: <span className="font-semibold">{selectedUserForPasswordReset.email}</span>
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Nova Senha
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Mínimo 6 caracteres"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Confirmar Senha
+                </label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Digite a senha novamente"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowResetPasswordModal(false);
+                  setSelectedUserForPasswordReset(null);
+                  setNewPassword('');
+                  setConfirmPassword('');
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-semibold hover:bg-gray-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmResetPassword}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -850,7 +992,7 @@ const QuickActionButton = ({ icon, label, onClick, color }: any) => (
   </button>
 );
 
-const UsersManagement = ({ users, filters, onFiltersChange, onViewUser, onDeleteUser }: any) => (
+const UsersManagement = ({ users, filters, onFiltersChange, onViewUser, onDeleteUser, onResetPassword }: any) => (
   <div className="bg-white rounded-xl shadow-sm border border-gray-200">
     <div className="p-6 border-b border-gray-200">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -948,6 +1090,13 @@ const UsersManagement = ({ users, filters, onFiltersChange, onViewUser, onDelete
                       title="Ver detalhes"
                     >
                       <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => onResetPassword(user)}
+                      className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition"
+                      title="Resetar senha"
+                    >
+                      <Key className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => onDeleteUser(user.id)}

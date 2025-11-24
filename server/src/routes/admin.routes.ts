@@ -371,6 +371,42 @@ router.put('/users/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Reset user password (admin only)
+router.put('/users/:id/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres' });
+    }
+
+    const userRepository = AppDataSource.getRepository(User);
+    const user = await userRepository.findOne({ where: { id } });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const { hashPassword } = await import('../services/auth.service');
+    const hashedPassword = await hashPassword(newPassword);
+    user.password = hashedPassword;
+
+    await userRepository.save(user);
+
+    // Remove password from response
+    const { password: _, ...userResponse } = user;
+
+    res.json({ 
+      message: 'Senha alterada com sucesso',
+      user: userResponse
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Erro ao alterar senha' });
+  }
+});
+
 router.delete('/users/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -426,6 +462,24 @@ router.delete('/content/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const contentRepository = AppDataSource.getRepository(ContentItem);
+    
+    const content = await contentRepository.findOne({
+      where: { id }
+    });
+
+    if (!content) {
+      return res.status(404).json({ error: 'Conteúdo não encontrado' });
+    }
+
+    // Proteger jogo de tabuada (não pode ser deletado)
+    const isTabuadaGame = content.id === '5' || 
+      (content.type === 'game' && (content.data as any)?.gameType === 'multiplication-table') ||
+      (content.title?.toLowerCase().includes('tabuada')) ||
+      (content.authorId === 'sys' && content.type === 'game');
+
+    if (isTabuadaGame) {
+      return res.status(403).json({ error: 'O jogo de tabuada é fixo e não pode ser removido' });
+    }
     
     await contentRepository.delete(id);
     res.json({ message: 'Conteúdo deletado com sucesso' });

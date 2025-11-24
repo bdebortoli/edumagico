@@ -45,10 +45,20 @@ const ContentRefinement: React.FC<ContentRefinementProps> = ({
         currentContentText = data.chapters?.map((ch: any) => `${ch.title}\n${ch.text}`).join('\n\n') || '';
       } else if (content.type === 'quiz') {
         const data = content.data as any;
-        currentContentText = data.questions?.map((q: any) => `${q.question}\n${q.options.join(', ')}\nResposta: ${q.explanation}`).join('\n\n') || '';
+        currentContentText = data.questions?.map((q: any) => {
+          let questionText = q.question || '';
+          if (q.options && Array.isArray(q.options) && q.options.length > 0) {
+            questionText += `\n${q.options.join(', ')}`;
+          }
+          if (q.explanation) {
+            questionText += `\nResposta: ${q.explanation}`;
+          }
+          return questionText;
+        }).join('\n\n') || '';
       } else if (content.type === 'summary') {
         const data = content.data as any;
-        currentContentText = `${data.simpleExplanation}\n\nPontos-chave: ${data.keyPoints?.join(', ')}\n\nCuriosidade: ${data.funFact}`;
+        const keyPoints = data.keyPoints && Array.isArray(data.keyPoints) ? data.keyPoints.join(', ') : '';
+        currentContentText = `${data.simpleExplanation || ''}\n\n${keyPoints ? `Pontos-chave: ${keyPoints}\n\n` : ''}${data.funFact ? `Curiosidade: ${data.funFact}` : ''}`;
       }
 
       const avgAge = Math.round(age);
@@ -62,11 +72,27 @@ const ContentRefinement: React.FC<ContentRefinementProps> = ({
         option.prompt
       );
 
+      // Verificar se precisa de confirmação
+      if (response.needsConfirmation) {
+        setError(response.confirmationMessage || 'Confirmação necessária');
+        setIsRefining(false);
+        setSelectedOption(null);
+        return;
+      }
+
+      // Verificar se o conteúdo foi gerado
+      if (!response.generated || !response.generated.content) {
+        setError('Erro: Conteúdo não foi gerado corretamente. Tente novamente.');
+        setIsRefining(false);
+        setSelectedOption(null);
+        return;
+      }
+
       const refinedContent: ContentItem = {
         ...content,
-        title: response.title || content.title,
-        description: response.description || content.description,
-        data: response.content
+        title: response.generated.title || content.title,
+        description: response.generated.description || content.description,
+        data: response.generated.content
       };
 
       onRefined(refinedContent);
@@ -93,10 +119,20 @@ const ContentRefinement: React.FC<ContentRefinementProps> = ({
         currentContentText = data.chapters?.map((ch: any) => `${ch.title}\n${ch.text}`).join('\n\n') || '';
       } else if (content.type === 'quiz') {
         const data = content.data as any;
-        currentContentText = data.questions?.map((q: any) => `${q.question}\n${q.options.join(', ')}\nResposta: ${q.explanation}`).join('\n\n') || '';
+        currentContentText = data.questions?.map((q: any) => {
+          let questionText = q.question || '';
+          if (q.options && Array.isArray(q.options) && q.options.length > 0) {
+            questionText += `\n${q.options.join(', ')}`;
+          }
+          if (q.explanation) {
+            questionText += `\nResposta: ${q.explanation}`;
+          }
+          return questionText;
+        }).join('\n\n') || '';
       } else if (content.type === 'summary') {
         const data = content.data as any;
-        currentContentText = `${data.simpleExplanation}\n\nPontos-chave: ${data.keyPoints?.join(', ')}\n\nCuriosidade: ${data.funFact}`;
+        const keyPoints = data.keyPoints && Array.isArray(data.keyPoints) ? data.keyPoints.join(', ') : '';
+        currentContentText = `${data.simpleExplanation || ''}\n\n${keyPoints ? `Pontos-chave: ${keyPoints}\n\n` : ''}${data.funFact ? `Curiosidade: ${data.funFact}` : ''}`;
       }
 
       const avgAge = Math.round(age);
@@ -110,11 +146,25 @@ const ContentRefinement: React.FC<ContentRefinementProps> = ({
         customRequest
       );
 
+      // Verificar se precisa de confirmação
+      if (response.needsConfirmation) {
+        setError(response.confirmationMessage || 'Confirmação necessária');
+        setIsRefining(false);
+        return;
+      }
+
+      // Verificar se o conteúdo foi gerado
+      if (!response.generated || !response.generated.content) {
+        setError('Erro: Conteúdo não foi gerado corretamente. Tente novamente.');
+        setIsRefining(false);
+        return;
+      }
+
       const refinedContent: ContentItem = {
         ...content,
-        title: response.title || content.title,
-        description: response.description || content.description,
-        data: response.content
+        title: response.generated.title || content.title,
+        description: response.generated.description || content.description,
+        data: response.generated.content
       };
 
       onRefined(refinedContent);
@@ -148,10 +198,20 @@ const ContentRefinement: React.FC<ContentRefinementProps> = ({
         currentContentText = data.chapters?.map((ch: any) => `${ch.title}\n${ch.text}`).join('\n\n') || '';
       } else if (content.type === 'quiz') {
         const data = content.data as any;
-        currentContentText = data.questions?.map((q: any) => `${q.question}\n${q.options.join(', ')}\nResposta: ${q.explanation}`).join('\n\n') || '';
+        currentContentText = data.questions?.map((q: any) => {
+          let questionText = q.question || '';
+          if (q.options && Array.isArray(q.options) && q.options.length > 0) {
+            questionText += `\n${q.options.join(', ')}`;
+          }
+          if (q.explanation) {
+            questionText += `\nResposta: ${q.explanation}`;
+          }
+          return questionText;
+        }).join('\n\n') || '';
       } else if (content.type === 'summary') {
         const data = content.data as any;
-        currentContentText = `${data.simpleExplanation}\n\nPontos-chave: ${data.keyPoints?.join(', ')}\n\nCuriosidade: ${data.funFact}`;
+        const keyPoints = data.keyPoints && Array.isArray(data.keyPoints) ? data.keyPoints.join(', ') : '';
+        currentContentText = `${data.simpleExplanation || ''}\n\n${keyPoints ? `Pontos-chave: ${keyPoints}\n\n` : ''}${data.funFact ? `Curiosidade: ${data.funFact}` : ''}`;
       }
 
       // Apply refinement
@@ -166,11 +226,27 @@ const ContentRefinement: React.FC<ContentRefinementProps> = ({
         userMessage
       );
 
+      // Verificar se precisa de confirmação
+      if (response.needsConfirmation) {
+        setError(response.confirmationMessage || 'Confirmação necessária');
+        setIsRefining(false);
+        setChatHistory(prev => [...prev, { role: 'model', text: 'Desculpe, ocorreu um erro. Tente novamente.' }]);
+        return;
+      }
+
+      // Verificar se o conteúdo foi gerado
+      if (!response.generated || !response.generated.content) {
+        setError('Erro: Conteúdo não foi gerado corretamente. Tente novamente.');
+        setIsRefining(false);
+        setChatHistory(prev => [...prev, { role: 'model', text: 'Desculpe, ocorreu um erro. Tente novamente.' }]);
+        return;
+      }
+
       const refinedContent: ContentItem = {
         ...content,
-        title: response.title || content.title,
-        description: response.description || content.description,
-        data: response.content
+        title: response.generated.title || content.title,
+        description: response.generated.description || content.description,
+        data: response.generated.content
       };
 
       onRefined(refinedContent);

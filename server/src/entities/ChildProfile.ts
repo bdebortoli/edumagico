@@ -20,6 +20,9 @@ export class ChildProfile {
   grade: string;
 
   @Column({ nullable: true })
+  educationLevel?: 'pre-escola' | 'fundamental1' | 'fundamental2' | 'ensino-medio'; // Categorização automática baseada na série
+
+  @Column({ nullable: true })
   school?: string;
 
   @Column({ nullable: true })

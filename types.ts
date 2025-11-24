@@ -76,6 +76,9 @@ export interface ChildProfile extends StudentProfile {
   name: string;
   birthDate?: string; // Data de nascimento no formato ISO (YYYY-MM-DD)
   age?: number; // Calculado a partir de birthDate, mantido para compatibilidade
+  educationLevel?: 'pre-escola' | 'fundamental1' | 'fundamental2' | 'ensino-medio'; // Categorização automática baseada na série
+  state?: string; // Estado do aluno
+  city?: string; // Cidade do aluno
 }
 
 export interface ActivityHistory {

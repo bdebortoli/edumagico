@@ -160,9 +160,17 @@ export const db = {
       // Add new seed content if it doesn't exist
       const existingContent = JSON.parse(localStorage.getItem(DB_KEYS.CONTENT) || '[]');
       const tabuadaGame = SEED_CONTENT.find(c => c.id === '5');
-      if (tabuadaGame && !existingContent.find((c: ContentItem) => c.id === '5')) {
-        existingContent.push(tabuadaGame);
-        localStorage.setItem(DB_KEYS.CONTENT, JSON.stringify(existingContent));
+      // Sempre garantir que jogo de tabuada existe (restaurar se foi deletado)
+      if (tabuadaGame) {
+        const tabuadaExists = existingContent.find((c: ContentItem) => 
+          c.id === '5' || 
+          (c.type === 'game' && (c.data as any)?.gameType === 'multiplication-table') ||
+          (c.title?.toLowerCase().includes('tabuada'))
+        );
+        if (!tabuadaExists) {
+          existingContent.push(tabuadaGame);
+          localStorage.setItem(DB_KEYS.CONTENT, JSON.stringify(existingContent));
+        }
       }
     }
     
@@ -208,8 +216,21 @@ export const db = {
   },
 
   deleteContent: (id: string) => {
-    const contents = db.getContent().filter(c => c.id !== id);
-    localStorage.setItem(DB_KEYS.CONTENT, JSON.stringify(contents));
+    // Proteger jogo de tabuada
+    const contents = db.getContent();
+    const content = contents.find((c: ContentItem) => c.id === id);
+    if (content) {
+      const isTabuadaGame = content.id === '5' || 
+        (content.type === 'game' && (content.data as any)?.gameType === 'multiplication-table') ||
+        (content.title?.toLowerCase().includes('tabuada'));
+      
+      if (isTabuadaGame) {
+        console.warn('Tentativa de deletar jogo de tabuada bloqueada');
+        return;
+      }
+    }
+    const filteredContents = contents.filter(c => c.id !== id);
+    localStorage.setItem(DB_KEYS.CONTENT, JSON.stringify(filteredContents));
   }
 };
 
