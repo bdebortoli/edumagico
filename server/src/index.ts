@@ -72,9 +72,9 @@ const corsOptions: CorsOptions = {
   maxAge: 86400 // 24 horas
 };
 app.use(cors(corsOptions));
-// Aumentar limite de payload para suportar imagens em base64 (50MB)
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Aumentar limite de payload para suportar imagens em base64 (150MB para acomodar até 20 arquivos)
+app.use(express.json({ limit: '150mb' }));
+app.use(express.urlencoded({ extended: true, limit: '150mb' }));
 
 // Health check (antes de qualquer inicialização do banco)
 app.get('/health', (req, res) => {

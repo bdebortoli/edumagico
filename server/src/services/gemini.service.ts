@@ -682,7 +682,16 @@ NÃO use questões discursivas ou de interpretação complexa para este nível.`
     // Then add the text prompt
     parts.push({ text: promptText });
 
-    const result = await model.generateContent(parts);
+    // Timeout maior para requisições com muitos arquivos
+    // A API do Gemini pode demorar mais com múltiplos arquivos
+    const timeoutMs = files.length > 10 ? 300000 : 120000; // 5min para >10 arquivos, 2min para <=10
+    
+    const generatePromise = model.generateContent(parts);
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('TIMEOUT: A requisição demorou muito para processar. Tente com menos arquivos ou arquivos menores.')), timeoutMs);
+    });
+    
+    const result = await Promise.race([generatePromise, timeoutPromise]) as any;
     
     const response = await result.response;
     const text = response.text();
@@ -734,7 +743,7 @@ NÃO use questões discursivas ou de interpretação complexa para este nível.`
       } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
         errorMessage = 'Erro interno do servidor do Gemini. Tente novamente mais tarde.';
       } else if (error.message.includes('timeout') || error.message.includes('TIMEOUT')) {
-        errorMessage = 'Tempo de processamento excedido. Tente com menos arquivos ou arquivos menores.';
+        errorMessage = error.message.includes('TIMEOUT:') ? error.message : 'Tempo de processamento excedido. Tente com menos arquivos ou arquivos menores.';
       } else {
         errorMessage = `Erro ao gerar conteúdo: ${error.message}`;
       }
