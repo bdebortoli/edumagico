@@ -707,7 +707,13 @@ NÃO use questões discursivas ou de interpretação complexa para este nível.`
       message: error.message,
       status: error.status,
       statusText: error.statusText,
-      stack: error.stack
+      stack: error.stack,
+      filesCount: files?.length || 0,
+      filesInfo: files?.map((f: any) => ({
+        name: f.name,
+        mimeType: f.mimeType,
+        size: f.data?.length || 0
+      })) || []
     });
     
     // Mensagens de erro mais específicas
@@ -716,16 +722,34 @@ NÃO use questões discursivas ou de interpretação complexa para este nível.`
     if (error.message) {
       if (error.message.includes('Unsupported MIME type')) {
         errorMessage = 'Tipo de arquivo não suportado pelo Gemini. Use apenas PDF ou imagens (JPG, PNG, GIF, WEBP).';
-      } else if (error.message.includes('400 Bad Request')) {
-        errorMessage = 'Erro na requisição ao Gemini. Verifique os arquivos enviados e tente novamente.';
-      } else if (error.message.includes('401') || error.message.includes('API key')) {
+      } else if (error.message.includes('400 Bad Request') || error.message.includes('400')) {
+        // Erro 400 geralmente indica problema com os arquivos ou formato da requisição
+        errorMessage = 'Erro na requisição ao Gemini. Verifique os arquivos enviados e tente novamente. Se o problema persistir, tente com menos arquivos ou arquivos menores.';
+      } else if (error.message.includes('401') || error.message.includes('API key') || error.message.includes('authentication')) {
         errorMessage = 'Erro de autenticação com a API do Gemini. Verifique a chave da API.';
-      } else if (error.message.includes('429') || error.message.includes('quota')) {
+      } else if (error.message.includes('429') || error.message.includes('quota') || error.message.includes('rate limit')) {
         errorMessage = 'Limite de requisições excedido. Tente novamente em alguns instantes.';
-      } else if (error.message.includes('500')) {
+      } else if (error.message.includes('413') || error.message.includes('too large') || error.message.includes('Payload too large')) {
+        errorMessage = 'Arquivos muito grandes. Tente enviar menos arquivos ou arquivos menores.';
+      } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
         errorMessage = 'Erro interno do servidor do Gemini. Tente novamente mais tarde.';
+      } else if (error.message.includes('timeout') || error.message.includes('TIMEOUT')) {
+        errorMessage = 'Tempo de processamento excedido. Tente com menos arquivos ou arquivos menores.';
       } else {
         errorMessage = `Erro ao gerar conteúdo: ${error.message}`;
+      }
+    } else if (error.status) {
+      // Se não há mensagem mas há status code
+      if (error.status === 400) {
+        errorMessage = 'Erro na requisição ao Gemini. Verifique os arquivos enviados e tente novamente.';
+      } else if (error.status === 401) {
+        errorMessage = 'Erro de autenticação com a API do Gemini. Verifique a chave da API.';
+      } else if (error.status === 429) {
+        errorMessage = 'Limite de requisições excedido. Tente novamente em alguns instantes.';
+      } else if (error.status === 413) {
+        errorMessage = 'Arquivos muito grandes. Tente enviar menos arquivos ou arquivos menores.';
+      } else if (error.status === 500) {
+        errorMessage = 'Erro interno do servidor do Gemini. Tente novamente mais tarde.';
       }
     }
     

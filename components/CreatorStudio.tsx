@@ -449,7 +449,45 @@ const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPla
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (selectedFiles) {
-      Array.from(selectedFiles).forEach((file: File) => {
+      const MAX_FILES = 10; // Limite de arquivos
+      const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB por arquivo
+      const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB total
+      
+      const filesArray: File[] = Array.from(selectedFiles);
+      
+      // Verificar limite de quantidade
+      if (files.length + filesArray.length > MAX_FILES) {
+        alert(`Limite de arquivos excedido. Você pode enviar no máximo ${MAX_FILES} arquivos por vez.`);
+        e.target.value = ''; // Limpa o input
+        return;
+      }
+      
+      // Calcular tamanho total atual + novos arquivos
+      let currentTotalSize = 0;
+      for (const f of files) {
+        // Estimar tamanho do base64 (aproximadamente 33% maior que o original)
+        currentTotalSize += f.data.length * 0.75;
+      }
+      
+      let newFilesTotalSize = 0;
+      for (const file of filesArray) {
+        newFilesTotalSize += file.size;
+      }
+      const estimatedNewBase64Size = newFilesTotalSize * 1.33; // Base64 é ~33% maior
+      
+      if (currentTotalSize + estimatedNewBase64Size > MAX_TOTAL_SIZE) {
+        alert(`Tamanho total dos arquivos excedido. O limite é de ${MAX_TOTAL_SIZE / (1024 * 1024)}MB. Remova alguns arquivos e tente novamente.`);
+        e.target.value = ''; // Limpa o input
+        return;
+      }
+      
+      filesArray.forEach((file: File) => {
+        // Valida tamanho individual do arquivo
+        if (file.size > MAX_FILE_SIZE) {
+          alert(`Arquivo muito grande: ${file.name}\n\nTamanho máximo permitido: ${MAX_FILE_SIZE / (1024 * 1024)}MB\nTamanho do arquivo: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
+          return;
+        }
+        
         // Valida tipos de arquivo permitidos (apenas os suportados pelo Gemini API)
         const allowedTypes = [
           'image/', // Todas as imagens (inclui JPG, PNG, etc)
@@ -468,34 +506,52 @@ const CreatorStudio: React.FC<CreatorStudioProps> = ({ onContentCreated, userPla
         }
 
         const reader = new FileReader();
+        reader.onerror = () => {
+          alert(`Erro ao ler o arquivo: ${file.name}. Tente novamente.`);
+        };
         reader.onloadend = () => {
-          const base64String = reader.result as string;
-          const base64Data = base64String.split(',')[1];
-          
-          // Normaliza mimeType
-          let mimeType = file.type;
-          if (!mimeType) {
-            if (fileExtension === 'jpg' || fileExtension === 'jpeg') {
-              mimeType = 'image/jpeg';
-            } else if (fileExtension === 'png') {
-              mimeType = 'image/png';
-            } else if (fileExtension === 'gif') {
-              mimeType = 'image/gif';
-            } else if (fileExtension === 'webp') {
-              mimeType = 'image/webp';
-            } else if (fileExtension === 'pdf') {
-              mimeType = 'application/pdf';
+          try {
+            const base64String = reader.result as string;
+            if (!base64String) {
+              throw new Error('Arquivo vazio');
             }
+            const base64Data = base64String.split(',')[1];
+            
+            if (!base64Data) {
+              throw new Error('Erro ao converter arquivo para base64');
+            }
+            
+            // Normaliza mimeType
+            let mimeType = file.type;
+            if (!mimeType) {
+              if (fileExtension === 'jpg' || fileExtension === 'jpeg') {
+                mimeType = 'image/jpeg';
+              } else if (fileExtension === 'png') {
+                mimeType = 'image/png';
+              } else if (fileExtension === 'gif') {
+                mimeType = 'image/gif';
+              } else if (fileExtension === 'webp') {
+                mimeType = 'image/webp';
+              } else if (fileExtension === 'pdf') {
+                mimeType = 'application/pdf';
+              }
+            }
+            
+            setFiles(prev => [...prev, {
+              name: file.name,
+              mimeType: mimeType || 'application/octet-stream',
+              data: base64Data
+            }]);
+          } catch (error: any) {
+            console.error('Erro ao processar arquivo:', error);
+            alert(`Erro ao processar o arquivo ${file.name}: ${error.message || 'Erro desconhecido'}`);
           }
-          
-          setFiles(prev => [...prev, {
-            name: file.name,
-            mimeType: mimeType || 'application/octet-stream',
-            data: base64Data
-          }]);
         };
         reader.readAsDataURL(file);
       });
+      
+      // Limpa o input após processar
+      e.target.value = '';
     }
   };
 

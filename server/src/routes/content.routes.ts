@@ -245,6 +245,68 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: 'Apenas usuários Premium ou Professores podem gerar conteúdo com IA' });
     }
 
+    // Validação de arquivos
+    const MAX_FILES = 10;
+    const MAX_FILE_SIZE_BASE64 = 30 * 1024 * 1024; // ~30MB em base64 (aproximadamente 20MB original)
+    const MAX_TOTAL_SIZE_BASE64 = 60 * 1024 * 1024; // ~60MB total em base64
+    
+    if (files && Array.isArray(files)) {
+      // Validar quantidade de arquivos
+      if (files.length > MAX_FILES) {
+        return res.status(400).json({ 
+          error: `Limite de arquivos excedido. Máximo permitido: ${MAX_FILES} arquivos por requisição.` 
+        });
+      }
+      
+      // Validar tamanho de cada arquivo e tamanho total
+      let totalSize = 0;
+      for (const file of files) {
+        if (!file.data || typeof file.data !== 'string') {
+          return res.status(400).json({ 
+            error: `Arquivo inválido: ${file.name || 'desconhecido'}. Dados do arquivo estão corrompidos.` 
+          });
+        }
+        
+        const fileSize = Buffer.from(file.data, 'base64').length;
+        if (fileSize > MAX_FILE_SIZE_BASE64) {
+          return res.status(400).json({ 
+            error: `Arquivo muito grande: ${file.name || 'desconhecido'}. Tamanho máximo: ${MAX_FILE_SIZE_BASE64 / (1024 * 1024)}MB.` 
+          });
+        }
+        
+        totalSize += fileSize;
+      }
+      
+      if (totalSize > MAX_TOTAL_SIZE_BASE64) {
+        return res.status(400).json({ 
+          error: `Tamanho total dos arquivos excedido. Limite: ${MAX_TOTAL_SIZE_BASE64 / (1024 * 1024)}MB. Remova alguns arquivos e tente novamente.` 
+        });
+      }
+      
+      // Validar tipos MIME suportados
+      const supportedMimeTypes = [
+        'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+        'application/pdf'
+      ];
+      
+      for (const file of files) {
+        if (!file.mimeType) {
+          return res.status(400).json({ 
+            error: `Tipo de arquivo não identificado: ${file.name || 'desconhecido'}.` 
+          });
+        }
+        
+        const isSupported = supportedMimeTypes.includes(file.mimeType) || 
+                           file.mimeType.startsWith('image/');
+        
+        if (!isSupported) {
+          return res.status(400).json({ 
+            error: `Tipo de arquivo não suportado: ${file.mimeType}. Use apenas PDF ou imagens (JPG, PNG, GIF, WEBP).` 
+          });
+        }
+      }
+    }
+
     // MIDDLEWARE DE VALIDAÇÃO: Verificar se precisa de confirmação de tamanho (passa grade para validação)
     const validation = validateContentRequest(prompt, contentType, grade);
     
@@ -271,6 +333,13 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Generate content error:', error);
     console.error('Error stack:', error.stack);
+    console.error('Request body info:', {
+      hasPrompt: !!req.body.prompt,
+      hasAge: !!req.body.age,
+      hasContentType: !!req.body.contentType,
+      filesCount: req.body.files?.length || 0,
+      filesTotalSize: req.body.files?.reduce((sum: number, f: any) => sum + (f.data?.length || 0), 0) || 0
+    });
     
     // Retornar mensagem de erro mais específica
     let errorMessage = error.message || 'Erro ao gerar conteúdo';
@@ -283,9 +352,15 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
     } else if (errorMessage.includes('Unsupported MIME type')) {
       errorMessage = 'Tipo de arquivo não suportado. Use apenas PDF ou imagens (JPG, PNG).';
       statusCode = 400;
-    } else if (errorMessage.includes('400 Bad Request')) {
-      errorMessage = 'Erro na requisição. Verifique os arquivos enviados e tente novamente.';
+    } else if (errorMessage.includes('400 Bad Request') || errorMessage.includes('400')) {
+      errorMessage = 'Erro na requisição ao Gemini. Verifique os arquivos enviados e tente novamente.';
       statusCode = 400;
+    } else if (errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('rate limit')) {
+      errorMessage = 'Limite de requisições excedido. Tente novamente em alguns instantes.';
+      statusCode = 429;
+    } else if (errorMessage.includes('413') || errorMessage.includes('too large')) {
+      errorMessage = 'Arquivos muito grandes. Tente enviar menos arquivos ou arquivos menores.';
+      statusCode = 413;
     }
     
     res.status(statusCode).json({ 
