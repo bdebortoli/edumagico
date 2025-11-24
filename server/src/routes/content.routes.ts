@@ -246,9 +246,9 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
     }
 
     // Validação de arquivos
-    const MAX_FILES = 10;
+    const MAX_FILES = 20;
     const MAX_FILE_SIZE_BASE64 = 30 * 1024 * 1024; // ~30MB em base64 (aproximadamente 20MB original)
-    const MAX_TOTAL_SIZE_BASE64 = 60 * 1024 * 1024; // ~60MB total em base64
+    const MAX_TOTAL_SIZE_BASE64 = 120 * 1024 * 1024; // ~120MB total em base64 (aumentado para acomodar mais arquivos)
     
     if (files && Array.isArray(files)) {
       // Validar quantidade de arquivos
