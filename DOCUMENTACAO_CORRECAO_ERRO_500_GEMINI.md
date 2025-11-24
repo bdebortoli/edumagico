@@ -115,6 +115,10 @@ for (const file of files) {
    - Melhorias no tratamento de erros
    - Logs mais detalhados com informações dos arquivos
    - Mensagens de erro específicas por tipo de problema
+   - Timeout dinâmico baseado na quantidade de arquivos (2min para ≤10 arquivos, 5min para >10 arquivos)
+
+4. **`server/src/index.ts`**
+   - Limite do Express aumentado de 50MB para 150MB para suportar múltiplos arquivos
 
 ## 🎯 Impacto das Alterações
 
@@ -140,6 +144,8 @@ for (const file of files) {
 - **Máximo de arquivos**: 20 por requisição
 - **Tamanho máximo por arquivo**: 20MB (frontend) / 30MB base64 (backend)
 - **Tamanho total máximo**: 100MB (frontend) / 120MB base64 (backend)
+- **Limite do Express**: 150MB (aumentado para suportar múltiplos arquivos)
+- **Timeout**: 2 minutos (≤10 arquivos) / 5 minutos (>10 arquivos)
 
 ### Tipos de Arquivo Suportados:
 - ✅ Imagens: JPG, JPEG, PNG, GIF, WEBP
